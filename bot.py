@@ -39,8 +39,8 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///bot.db")
 COMMON_CHAT_ID = int(os.getenv("COMMON_CHAT_ID", "-1001234567890"))
-OFFICE_LAT = float(os.getenv("OFFICE_LAT", "51.1282"))
-OFFICE_LON = float(os.getenv("OFFICE_LON", "71.4304"))
+OFFICE_LAT = float(os.getenv("OFFICE_LAT", "43.231518"))
+OFFICE_LON = float(os.getenv("OFFICE_LON", "76.882392"))
 OFFICE_RADIUS_METERS = int(os.getenv("OFFICE_RADIUS_METERS", "300"))
 
 # — Логирование —

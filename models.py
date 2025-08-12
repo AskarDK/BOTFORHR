@@ -13,7 +13,7 @@ from sqlalchemy import UniqueConstraint
 from sqlalchemy import Date
 
 load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///bot.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 Base = declarative_base()
 from sqlalchemy import create_engine

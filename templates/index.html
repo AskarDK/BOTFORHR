@@ -53,11 +53,16 @@
     ::-webkit-scrollbar-track { background: #f1f1f1; }
     ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
     ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+    .accordion-content {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease-out;
+    }
   </style>
 </head>
 <body class="antialiased text-gray-800 h-full">
 
-  <div id="flash-container" class="fixed top-5 right-5 z-[100] space-y-3 w-96">
+  <div id="flash-container" class="fixed top-5 right-5 z-[100] space-y-3 w-80 md:w-96">
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
           {% for category, message in messages %}
@@ -70,46 +75,68 @@
       {% endwith %}
   </div>
 
-  <div class="flex h-full">
-    <aside class="w-64 bg-white shadow-md flex flex-col flex-shrink-0">
-      <div class="h-16 flex items-center justify-center border-b bg-primary-dark shadow-inner">
+  <div class="relative min-h-screen md:flex">
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden md:hidden"></div>
+
+    <aside id="sidebar" class="w-64 bg-white shadow-md flex flex-col fixed inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 ease-in-out z-40">
+      <div class="h-16 flex items-center justify-center border-b bg-primary-dark shadow-inner flex-shrink-0">
         <h1 class="text-xl font-bold text-white"><i class="bi bi-robot mr-2"></i> HR Bot Panel</h1>
       </div>
-      <nav id="sidebar-nav" class="flex-grow p-4 space-y-2">
-        <a href="#" data-target="dashboard" class="sidebar-link flex items-center p-3 rounded-lg">
-          <i class="bi bi-grid-1x2-fill w-6 text-gray-500"></i><span class="ml-3">Главная</span>
-        </a>
-        <a href="#" data-target="employees" class="sidebar-link flex items-center p-3 rounded-lg">
-          <i class="bi bi-people-fill w-6 text-gray-500"></i><span class="ml-3">Сотрудники</span>
-        </a>
-        <a href="#" data-target="customization" class="sidebar-link flex items-center p-3 rounded-lg">
-            <i class="bi bi-pencil-square w-6 text-gray-500"></i><span class="ml-3">Контент и Сценарии</span>
-        </a>
-        <a href="#" data-target="onboarding" class="sidebar-link flex items-center p-3 rounded-lg">
-          <i class="bi bi-mortarboard-fill w-6 text-gray-500"></i><span class="ml-3">Тренинг и Квизы</span>
-        </a>
-        <a href="#" data-target="events" class="sidebar-link flex items-center p-3 rounded-lg">
-          <i class="bi bi-calendar-event-fill w-6 text-gray-500"></i><span class="ml-3">Ивенты</span>
-        </a>
-       <a href="#" data-target="ideas" class="sidebar-link flex items-center p-3 rounded-lg">
-          <i class="bi bi-lightbulb-fill w-6 text-gray-500"></i><span class="ml-3">Идеи</span>
-        </a>
-        <a href="#" data-target="broadcast" class="sidebar-link flex items-center p-3 rounded-lg">
-          <i class="bi bi-megaphone-fill w-6 text-gray-500"></i><span class="ml-3">Рассылки</span>
-        </a>
-        <a href="#" data-target="knowledge" class="sidebar-link flex items-center p-3 rounded-lg">
-          <i class="bi bi-book-half w-6 text-gray-500"></i><span class="ml-3">База знаний</span>
-        </a>
-        <a href="#" data-target="config" class="sidebar-link flex items-center p-3 rounded-lg">
-          <i class="bi bi-gear-fill w-6 text-gray-500"></i><span class="ml-3">Настройки</span>
-        </a>
-      </nav>
+      <nav id="sidebar-nav" class="flex-grow p-4 space-y-2 overflow-y-auto">
+  <a href="#" data-target="dashboard" class="sidebar-link flex items-center p-3 rounded-lg">
+    <i class="bi bi-grid-1x2-fill w-6 text-gray-500"></i><span class="ml-3">Главная</span>
+  </a>
+  <a href="#" data-target="employees" class="sidebar-link flex items-center p-3 rounded-lg">
+    <i class="bi bi-people-fill w-6 text-gray-500"></i><span class="ml-3">Сотрудники</span>
+  </a>
+  <a href="#" data-target="attendance" class="sidebar-link flex items-center p-3 rounded-lg">
+    <i class="bi bi-calendar-check-fill w-6 text-gray-500"></i><span class="ml-3">Посещаемость</span>
+  </a>
+  <a href="#" data-target="customization" class="sidebar-link flex items-center p-3 rounded-lg">
+    <i class="bi bi-pencil-square w-6 text-gray-500"></i><span class="ml-3">Контент и Сценарии</span>
+  </a>
+  <a href="#" data-target="onboarding" class="sidebar-link flex items-center p-3 rounded-lg">
+    <i class="bi bi-mortarboard-fill w-6 text-gray-500"></i><span class="ml-3">Тренинг и Квизы</span>
+  </a>
+  <a href="#" data-target="events" class="sidebar-link flex items-center p-3 rounded-lg">
+    <i class="bi bi-calendar-event-fill w-6 text-gray-500"></i><span class="ml-3">Ивенты</span>
+  </a>
+  <a href="#" data-target="ideas" class="sidebar-link flex items-center p-3 rounded-lg">
+    <i class="bi bi-lightbulb-fill w-6 text-gray-500"></i><span class="ml-3">Идеи</span>
+  </a>
+  <a href="#" data-target="broadcast" class="sidebar-link flex items-center p-3 rounded-lg">
+    <i class="bi bi-megaphone-fill w-6 text-gray-500"></i><span class="ml-3">Рассылки</span>
+  </a>
+  <a href="#" data-target="knowledge" class="sidebar-link flex items-center p-3 rounded-lg">
+    <i class="bi bi-book-half w-6 text-gray-500"></i><span class="ml-3">База знаний</span>
+  </a>
+  <a href="#" data-target="config" class="sidebar-link flex items-center p-3 rounded-lg">
+    <i class="bi bi-gear-fill w-6 text-gray-500"></i><span class="ml-3">Настройки</span>
+  </a>
+</nav>
+
+<!-- Кнопка logout внизу сайдбара -->
+<div class="p-4 border-t">
+  <a href="{{ url_for('logout') }}"
+     class="w-full inline-flex items-center justify-center bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition">
+    <i class="bi bi-box-arrow-right mr-2"></i> Выйти
+  </a>
+</div>
+
     </aside>
 
-    <main class="flex-grow p-6 md:p-8 overflow-y-auto">
+    <div class="flex-1 flex flex-col">
+        <header class="p-4 md:hidden flex justify-between items-center bg-white shadow-md sticky top-0 z-20">
+            <h2 id="mobile-header-title" class="text-lg font-semibold capitalize">Dashboard</h2>
+            <button id="hamburger-btn" class="text-2xl p-2">
+                <i class="bi bi-list"></i>
+            </button>
+        </header>
+
+        <main class="flex-grow p-4 md:p-8 overflow-y-auto">
 
       <div id="dashboard-content" class="content-section">
-          <h1 class="text-3xl font-bold text-gray-900 mb-2">Добро пожаловать!</h1>
+          <h1 class="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Добро пожаловать!</h1>
           <p class="text-gray-600 mb-8">Это панель управления вашим HR-ботом. Выберите раздел слева, чтобы начать.</p>
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div class="bg-white p-6 rounded-xl shadow-lg flex items-center space-x-4 transition hover:shadow-xl hover:-translate-y-1">
@@ -144,14 +171,21 @@
       </div>
 
       <div id="employees-content" class="content-section">
-          <div class="flex justify-between items-center mb-6">
-              <h1 class="text-3xl font-bold text-gray-900">Сотрудники</h1>
-              <button data-modal-target="add-employee" class="bg-primary hover:bg-primary-hover text-white font-bold py-2 px-4 rounded-lg flex items-center shadow hover:shadow-lg transition">
-                <i class="bi bi-plus-lg mr-2"></i> Добавить сотрудника
-              </button>
-          </div>
+          <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-6 space-y-4 md:space-y-0">
+  <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Сотрудники</h1>
+  <div class="flex items-center gap-3">
+   <a href="{{ url_for('export_employees_xlsx') }}" class="bg-gray-700 hover:bg-gray-800 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center shadow hover:shadow-lg transition">
+  <i class="bi bi-file-earmark-spreadsheet mr-2"></i> Экспорт Excel
+</a>
+
+    <button data-modal-target="add-employee" class="bg-primary hover:bg-primary-hover text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center shadow hover:shadow-lg transition">
+      <i class="bi bi-plus-lg mr-2"></i> Добавить сотрудника
+    </button>
+  </div>
+</div>
+
           <div class="space-y-8">
-              <div class="bg-white p-6 rounded-xl shadow-lg">
+              <div class="bg-white p-4 md:p-6 rounded-xl shadow-lg">
                 <h3 class="text-xl font-semibold mb-4 text-gray-800">Активные сотрудники</h3>
                 <input id="searchEmployees" type="text" class="w-full rounded-md border-gray-300 shadow-sm p-3 mb-4 focus:ring-primary focus:border-primary" placeholder="Поиск по активным сотрудникам…">
                 <div class="overflow-x-auto">
@@ -189,7 +223,7 @@
                     {% endif %}
                 </div>
             </td>
-            <td class="px-6 py-4 text-right space-x-2">
+            <td class="px-6 py-4 text-right space-x-2 whitespace-nowrap">
               <button data-modal-target="edit-employee-{{ emp.id }}" class="p-2 text-gray-500 hover:text-primary rounded-full hover:bg-gray-100 transition"><i class="bi bi-pencil-fill"></i></button>
               <button data-modal-target="actions-employee-{{ emp.id }}" class="p-2 text-gray-500 hover:text-secondary rounded-full hover:bg-gray-100 transition"><i class="bi bi-three-dots-vertical"></i></button>
             </td>
@@ -201,7 +235,7 @@
 </table>
                 </div>
               </div>
-              <div class="bg-white p-6 rounded-xl shadow-lg">
+              <div class="bg-white p-4 md:p-6 rounded-xl shadow-lg">
                 <h3 class="text-xl font-semibold mb-4 text-gray-800">Архив сотрудников</h3>
                 <input id="searchArchivedEmployees" type="text" class="w-full rounded-md border-gray-300 shadow-sm p-3 mb-4 focus:ring-primary focus:border-primary" placeholder="Поиск в архиве…">
                 <div class="overflow-x-auto max-h-72">
@@ -220,7 +254,7 @@
                             <td class="px-6 py-3">{{ emp.id }}</td>
                             <td class="px-6 py-3 font-medium text-gray-800">{{ emp.name }}</td>
                             <td class="px-6 py-3">{{ emp.role }}</td>
-                            <td class="px-6 py-3">{{ emp.dismissal_date.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td class="px-6 py-3">{{ emp.dismissal_date|fmt_dt('%Y-%m-%d %H:%M') }}</td>
                           </tr>
                         {% else %}
                           <tr><td colspan="4" class="py-8 text-center text-gray-500">В архиве никого нет.</td></tr>
@@ -232,22 +266,71 @@
           </div>
       </div>
 
-      <div id="customization-content" class="content-section">
-          <h1 class="text-3xl font-bold text-gray-900 mb-6">Контент и Сценарии</h1>
 
-          <div class="border-b border-gray-200 mb-6">
+<div id="attendance-content" class="content-section">
+    <h1 class="text-2xl md:text-3xl font-bold text-gray-900 mb-6">Журнал посещаемости</h1>
+    <div class="bg-white p-4 md:p-6 rounded-xl shadow-lg">
+      <input id="searchAttendance" type="text" class="w-full rounded-md border-gray-300 shadow-sm p-3 mb-4 focus:ring-primary focus:border-primary" placeholder="Поиск по имени, дате...">
+      <div class="overflow-x-auto max-h-[70vh]">
+        <table id="attendanceTable" class="w-full text-sm text-left text-gray-600">
+          <thead class="bg-gray-50 text-xs uppercase text-gray-700 sticky top-0">
+              <tr>
+                <th class="px-6 py-3 rounded-l-lg">Сотрудник</th>
+                <th class="px-6 py-3">Дата</th>
+                <th class="px-6 py-3">Приход</th>
+                <th class="px-6 py-3 rounded-r-lg">Уход</th>
+              </tr>
+          </thead>
+          <tbody class="bg-white">
+              {% for record, employee_name in attendance_records %}
+                <tr class="border-b hover:bg-gray-50">
+                  <td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
+                    {{ employee_name }}
+                  </td>
+                  <td class="px-6 py-4">
+{{ record.date|fmt_date('%d.%m.%Y') }}
+                  </td>
+                  <td class="px-6 py-4 text-green-700 font-mono">
+          {% if record.arrival_time %}{{ record.arrival_time|fmt_time('%H:%M:%S') }}{% else %}—{% endif %}
+
+                  </td>
+               <td class="px-6 py-4 text-red-700 font-mono">
+  {% if record.departure_time %}
+    {{ record.departure_time|fmt_time('%H:%M:%S') }}
+  {% else %}
+    <span class="text-gray-400">Еще на месте</span>
+  {% endif %}
+</td>
+
+                </tr>
+              {% else %}
+                <tr><td colspan="4" class="py-8 text-center text-gray-500">Записей о посещаемости пока нет.</td></tr>
+              {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+</div>
+
+      <div id="customization-content" class="content-section">
+          <h1 class="text-2xl md:text-3xl font-bold text-gray-900 mb-6">Контент и Сценарии</h1>
+
+          <div class="border-b border-gray-200 mb-6 overflow-x-auto">
               <nav class="-mb-px flex space-x-6" id="customization-sub-tabs">
-                  <button data-sub-target="sub-texts" class="sub-tab-button py-3 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-primary border-transparent">
+                  <button data-sub-target="sub-texts" class="sub-tab-button py-3 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-primary border-transparent whitespace-nowrap">
                       <i class="bi bi-fonts mr-2"></i>Тексты бота
                   </button>
-                  <button data-sub-target="sub-scenarios" class="sub-tab-button py-3 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-primary border-transparent">
+                  <button data-sub-target="sub-scenarios" class="sub-tab-button py-3 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-primary border-transparent whitespace-nowrap">
                       <i class="bi bi-signpost-split-fill mr-2"></i>Сценарии онбординга
                   </button>
+                  <button data-sub-target="sub-guides" class="sub-tab-button py-3 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-primary border-transparent whitespace-nowrap">
+        <i class="bi bi-file-earmark-ruled-fill mr-2"></i>Регламенты и Гайды
+    </button>
               </nav>
           </div>
 
           <div id="sub-texts-content" class="sub-tab-content">
-              <div class="bg-white p-6 rounded-xl shadow-lg">
+              <div class="bg-white p-4 md:p-6 rounded-xl shadow-lg">
                 <h3 class="text-2xl font-semibold mb-1 text-gray-800">Редактор текстов бота</h3>
                 <p class="text-gray-500 mb-6">Здесь можно изменить любые стандартные фразы, которые использует бот.</p>
                 <div class="space-y-4">
@@ -256,9 +339,9 @@
                         <div class="bg-gray-50 p-4 rounded-lg border">
                             <label class="font-semibold text-gray-800">{{ text.id }}</label>
                             <p class="text-sm text-gray-500 mb-2">{{ text.description }}</p>
-                            <div class="flex items-center space-x-3">
+                            <div class="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
                                 <textarea name="text" rows="2" class="flex-grow mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 focus:ring-primary focus:border-primary">{{ text.text }}</textarea>
-                                <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow hover:shadow-md transition">Сохранить</button>
+                                <button type="submit" class="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow hover:shadow-md transition flex-shrink-0">Сохранить</button>
                             </div>
                         </div>
                     </form>
@@ -268,7 +351,7 @@
           </div>
 
           <div id="sub-scenarios-content" class="sub-tab-content">
-              <div class="bg-white p-6 rounded-xl shadow-lg">
+              <div class="bg-white p-4 md:p-6 rounded-xl shadow-lg">
                 <h3 class="text-2xl font-semibold mb-1 text-gray-800">Конструктор сценариев онбординга</h3>
                 <p class="text-gray-500 mb-6">Настройте уникальный сценарий знакомства для каждой роли.</p>
                  <div class="space-y-4" id="rolesConstructorAccordion">
@@ -333,8 +416,9 @@
                                         <h6 class="font-semibold">Добавить новый шаг</h6>
                                         <textarea name="message_text" placeholder="Текст сообщения (можно оставить пустым)" class="w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary"></textarea>
                                         <input type="file" name="file" class="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-primary hover:file:bg-indigo-100">
-                                        <select name="file_type" class="w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary">
-                                            <option value="video_note">Видео-кружок</option>
+                                       <select name="file_type" class="w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary">
+                                            <option value="video_note">Видео-кружок (конвертация)</option>
+                                            <option value="video">Обычное видео</option>
                                             <option value="photo">Фото</option>
                                             <option value="document">Документ</option>
                                         </select>
@@ -348,11 +432,54 @@
                 </div>
               </div>
           </div>
+          <div id="sub-guides-content" class="sub-tab-content">
+    <div class="bg-white p-4 md:p-6 rounded-xl shadow-lg">
+        <h3 class="text-2xl font-semibold mb-1 text-gray-800">Регламенты и гайды по должностям</h3>
+        <p class="text-gray-500 mb-6">Здесь можно добавить документы и инструкции для каждой роли.</p>
+        <div class="space-y-4" id="rolesGuidesAccordion">
+            {% for role in roles %}
+            <div class="bg-white rounded-lg border">
+                <div class="accordion-header cursor-pointer p-4 flex justify-between items-center hover:bg-gray-50">
+                    <h4 class="font-medium text-lg text-primary-dark">Роль: <span class="font-bold">{{ role.name }}</span></h4>
+                    <i class="bi bi-chevron-down accordion-icon transition-transform text-gray-500"></i>
+                </div>
+                <div class="accordion-content border-t p-6">
+                    <div id="guides-list-{{ role.name }}" class="space-y-3 mb-6">
+                        {% for guide in role_guides_data[role.name] %}
+                        <div class="flex justify-between items-start bg-gray-50 p-3 rounded-lg shadow-sm border" data-id="{{ guide.id }}">
+                            <div>
+                                <p class="font-semibold">{{ guide.title }}</p>
+                                <p class="text-xs text-gray-600">{{ guide.content }}</p>
+                                {% if guide.file_path %}<p class="text-xs text-blue-600">Прикреплен файл</p>{% endif %}
+                            </div>
+                            <form action="{{ url_for('delete_guide', guide_id=guide.id) }}" method="POST" onsubmit="return confirm('Удалить регламент?');">
+                                <button class="p-1 text-gray-400 hover:text-red-600"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </div>
+                        {% else %}
+                        <p class="text-sm text-gray-500">Для этой роли регламентов пока нет.</p>
+                        {% endfor %}
+                    </div>
+
+                    <form action="{{ url_for('add_guide', role=role.name) }}" method="POST" enctype="multipart/form-data" class="border p-4 rounded-lg mt-4 space-y-3">
+                        <h6 class="font-semibold">Добавить новый регламент</h6>
+                        <input name="title" placeholder="Название регламента" required class="w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary">
+                        <textarea name="content" placeholder="Краткое описание (необязательно)" class="w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary"></textarea>
+                        <label class="block text-sm font-medium">Прикрепить файл (необязательно)</label>
+                        <input type="file" name="file" class="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-primary hover:file:bg-indigo-100">
+                        <button type="submit" class="w-full bg-primary hover:bg-primary-hover text-white py-2 rounded-lg shadow transition">Добавить</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
       </div>
 
       <div id="onboarding-content" class="content-section">
-          <h1 class="text-3xl font-bold text-gray-900 mb-6">Тренинг и Квизы</h1>
-          <div class="bg-white p-6 rounded-xl shadow-lg">
+          <h1 class="text-2xl md:text-3xl font-bold text-gray-900 mb-6">Тренинг и Квизы</h1>
+          <div class="bg-white p-4 md:p-6 rounded-xl shadow-lg">
             <h3 class="text-2xl font-semibold mb-1 text-gray-800">Управление по ролям</h3>
             <p class="text-gray-500 mb-6">Здесь настраиваются учебные материалы и тесты для каждой должности.</p>
             <div class="space-y-4" id="rolesAccordion">
@@ -426,12 +553,17 @@
                         <div class="text-answer">
                           <input name="text_answer" type="text" class="w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary" placeholder="Правильный ответ"/>
                         </div>
-                        <div class="choice-section hidden flex flex-col space-y-2">
-                          <div class="options-container space-y-2 max-h-40 overflow-y-auto"></div>
-                          <button type="button" class="add-option mt-2 px-3 py-1 bg-indigo-500 text-white rounded-lg text-sm self-start">Добавить вариант</button>
-                          <input type="hidden" name="options" class="hidden-options" />
-                          <input type="hidden" name="answer"  class="hidden-answer" />
-                        </div>
+                        <!-- всегда присутствуют -->
+<input type="hidden" name="options" class="hidden-options" />
+<input type="hidden" name="answer"  class="hidden-answer" />
+
+
+
+<div class="choice-section hidden flex flex-col space-y-2">
+  <div class="options-container space-y-2 max-h-40 overflow-y-auto"></div>
+  <button type="button" class="add-option mt-2 px-3 py-1 bg-indigo-500 text-white rounded-lg text-sm self-start">Добавить вариант</button>
+</div>
+
                         <button type="submit" class="w-full bg-primary hover:bg-primary-hover text-white py-2 rounded-lg shadow transition">Сохранить вопрос</button>
                       </form>
                     </div>
@@ -444,13 +576,13 @@
       </div>
 
       <div id="events-content" class="content-section">
-          <div class="flex justify-between items-center mb-6">
-              <h1 class="text-3xl font-bold text-gray-900">Ивенты</h1>
-              <button data-modal-target="add-event" class="bg-primary hover:bg-primary-hover text-white font-bold py-2 px-4 rounded-lg flex items-center shadow hover:shadow-lg transition">
+          <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-6 space-y-4 md:space-y-0">
+              <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Ивенты</h1>
+              <button data-modal-target="add-event" class="bg-primary hover:bg-primary-hover text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center shadow hover:shadow-lg transition">
                 <i class="bi bi-plus-lg mr-2"></i> Добавить ивент
               </button>
           </div>
-          <div class="bg-white p-6 rounded-xl shadow-lg">
+          <div class="bg-white p-4 md:p-6 rounded-xl shadow-lg">
             <input id="searchEvents" type="text" class="w-full rounded-md border-gray-300 shadow-sm p-3 mb-4 focus:ring-primary focus:border-primary" placeholder="Поиск по ивентам…">
             <div class="overflow-x-auto">
                 <table id="eventsTable" class="w-full text-sm text-left text-gray-600">
@@ -464,12 +596,12 @@
                     <tbody>
                       {% for event in events %}
                       <tr class="bg-white border-b hover:bg-gray-50">
-                        <td class="px-6 py-4">{{ event.event_date.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">{{ event.event_date|fmt_dt('%Y-%m-%d %H:%M') }}</td>
                         <td class="px-6 py-4 font-medium text-gray-900">
                           {{ event.title }}
-                          <p class="text-xs text-gray-500">{{ event.description }}</p>
+                          <p class="text-xs text-gray-500 whitespace-normal">{{ event.description }}</p>
                         </td>
-                        <td class="px-6 py-4 text-right space-x-2">
+                        <td class="px-6 py-4 text-right space-x-2 whitespace-nowrap">
                            <button data-modal-target="edit-event-{{ event.id }}" class="p-2 text-gray-500 hover:text-primary rounded-full hover:bg-gray-100 transition"><i class="bi bi-pencil-fill"></i></button>
                            <form action="{{ url_for('delete_event', event_id=event.id) }}" method="POST" onsubmit="return confirm('Удалить ивент?');" class="inline">
                              <button class="p-2 text-gray-500 hover:text-red-500 rounded-full hover:bg-gray-100 transition"><i class="bi bi-trash"></i></button>
@@ -486,7 +618,7 @@
       </div>
 
       <div id="ideas-content" class="content-section">
-        <h1 class="text-3xl font-bold text-gray-900 mb-6">Идеи от сотрудников</h1>
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900 mb-6">Идеи от сотрудников</h1>
         <input id="searchIdeas" type="text" class="w-full rounded-md border-gray-300 shadow-sm p-3 mb-6 focus:ring-primary focus:border-primary" placeholder="Поиск по идеям и авторам…">
         <div id="ideasList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {% for idea, employee_name in ideas %}
@@ -495,7 +627,7 @@
             <div class="border-t pt-4 flex justify-between items-center text-sm">
               <div class="text-gray-600">
                 <p class="font-semibold">{{ employee_name or 'Автор неизвестен' }}</p>
-                <p class="text-xs">{{ idea.submission_date.strftime('%d.%m.%Y') }}</p>
+                <p class="text-xs">{{ idea.submission_date|fmt_date('%d.%m.%Y') }}</p>
               </div>
               <form action="{{ url_for('delete_idea', idea_id=idea.id) }}" method="POST" onsubmit="return confirm('Удалить идею?');">
                 <button class="p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50 transition"><i class="bi bi-trash"></i></button>
@@ -512,8 +644,8 @@
       </div>
 
         <div id="broadcast-content" class="content-section">
-        <h1 class="text-3xl font-bold text-gray-900 mb-6">Рассылка сообщений</h1>
-        <div class="bg-white p-6 rounded-xl shadow-lg max-w-2xl mx-auto">
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900 mb-6">Рассылка сообщений</h1>
+        <div class="bg-white p-4 md:p-6 rounded-xl shadow-lg max-w-2xl mx-auto">
           <form action="{{ url_for('send_broadcast') }}" method="POST" onsubmit="return confirm('Вы уверены, что хотите запустить рассылку?');">
               <div class="space-y-6">
                   <div>
@@ -531,7 +663,7 @@
                       </select>
                   </div>
 
-                  <div class="text-right">
+                  <div class="flex justify-end">
                     <button type="submit" class="bg-primary hover:bg-primary-hover text-white font-bold py-2 px-6 rounded-lg flex items-center shadow hover:shadow-lg transition">
                       <i class="bi bi-send-fill mr-2"></i> Отправить
                     </button>
@@ -542,13 +674,13 @@
       </div>
 
       <div id="knowledge-content" class="content-section">
-        <div class="flex justify-between items-center mb-6">
-              <h1 class="text-3xl font-bold text-gray-900">База знаний</h1>
-              <button data-modal-target="add-topic" class="bg-primary hover:bg-primary-hover text-white font-bold py-2 px-4 rounded-lg flex items-center shadow hover:shadow-lg transition">
+        <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-6 space-y-4 md:space-y-0">
+              <h1 class="text-2xl md:text-3xl font-bold text-gray-900">База знаний</h1>
+              <button data-modal-target="add-topic" class="bg-primary hover:bg-primary-hover text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center shadow hover:shadow-lg transition">
                 <i class="bi bi-plus-lg mr-2"></i> Добавить тему
               </button>
         </div>
-        <div class="bg-white p-6 rounded-xl shadow-lg">
+        <div class="bg-white p-4 md:p-6 rounded-xl shadow-lg">
             <input id="searchKnowledge" type="text" class="w-full rounded-md border-gray-300 shadow-sm p-3 mb-4 focus:ring-primary focus:border-primary" placeholder="Поиск по темам…">
             <div class="overflow-x-auto">
               <table id="knowledgeTable" class="w-full text-sm text-left text-gray-600">
@@ -564,10 +696,10 @@
                   <tr class="bg-white border-b hover:bg-gray-50">
                     <td class="px-6 py-4 font-medium text-gray-900">
                       {{ topic.title }}
-                      <p class="text-xs text-gray-500">{{ topic.content[:80] }}...</p>
+                      <p class="text-xs text-gray-500 whitespace-normal">{{ topic.content[:80] }}...</p>
                     </td>
                     <td class="px-6 py-4 text-xs">{{ topic.image_path or 'Нет' }}</td>
-                    <td class="px-6 py-4 text-right space-x-2">
+                    <td class="px-6 py-4 text-right space-x-2 whitespace-nowrap">
                        <button data-modal-target="edit-topic-{{ topic.id }}" class="p-2 text-gray-500 hover:text-primary rounded-full hover:bg-gray-100 transition"><i class="bi bi-pencil-fill"></i></button>
                        <form action="{{ url_for('delete_topic', topic_id=topic.id) }}" method="POST" onsubmit="return confirm('Удалить тему?');" class="inline">
                          <button class="p-2 text-gray-500 hover:text-red-500 rounded-full hover:bg-gray-100 transition"><i class="bi bi-trash"></i></button>
@@ -584,7 +716,7 @@
       </div>
 
       <div id="config-content" class="content-section">
-        <h1 class="text-3xl font-bold text-gray-900 mb-6">Настройки</h1>
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900 mb-6">Настройки</h1>
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div class="bg-white p-6 rounded-xl shadow-lg">
             <h3 class="text-xl font-semibold mb-4 text-gray-800">Управление ролями</h3>
@@ -616,10 +748,30 @@
                   <input type="password" name="BOT_TOKEN" class="mt-1 block w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary" placeholder="Оставьте пустым, чтобы не менять" />
                   <small class="text-xs text-gray-500">Текущий: {{ config.BOT_TOKEN[:5] }}...{{ config.BOT_TOKEN[-5:] }}</small>
                 </div>
-                <div>
-                  <label class="block text-sm font-medium">ID общего чата</label>
-                  <input type="text" name="COMMON_CHAT_ID" class="mt-1 block w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary" value="{{ config.COMMON_CHAT_ID }}" />
-                </div>
+               <div>
+  <label class="block text-sm font-medium">Общий чат (выберите из доступных групп)</label>
+  <select name="COMMON_CHAT_ID_SELECT"
+          class="mt-1 block w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary">
+    <option value="">— Выбрать из групп, где бот админ —</option>
+    {% for g in admin_groups %}
+      <option value="{{ g.chat_id }}"
+        {% if config.COMMON_CHAT_ID and config.COMMON_CHAT_ID|string == g.chat_id|string %}selected{% endif %}>
+        {{ g.name }} ({{ g.chat_id }})
+      </option>
+    {% endfor %}
+  </select>
+  <small class="text-xs text-gray-500">Список формируется автоматически, когда бота добавляют админом в группу.</small>
+</div>
+
+<div>
+  <label class="block text-sm font-medium mt-4">ID общего чата (ввести вручную, если нужно)</label>
+  <input type="text" name="COMMON_CHAT_ID"
+         class="mt-1 block w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary"
+         placeholder="Например: -1001234567890"
+         value="{{ config.COMMON_CHAT_ID }}" />
+  <small class="text-xs text-gray-400">Если выбрали чат выше, это поле можно оставить без изменений.</small>
+</div>
+
               </div>
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
@@ -642,9 +794,42 @@
           </div>
         </div>
       </div>
-
-    </main>
+        </main>
+    </div>
   </div>
+
+ {% for event in events %}
+<div id="edit-event-{{ event.id }}" class="modal hidden fixed inset-0 bg-gray-900 bg-opacity-50 items-center justify-center z-50">
+  <div class="modal-box bg-white p-8 rounded-xl shadow-2xl w-full max-w-md transform scale-95">
+    <div class="flex justify-between items-center mb-6 border-b pb-4">
+      <h3 class="text-2xl font-semibold">Редактировать ивент</h3>
+      <button data-modal-close class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+    </div>
+    <form action="{{ url_for('edit_event', event_id=event.id) }}" method="POST" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium">Название</label>
+        <input type="text" name="title" value="{{ event.title }}" required
+               class="mt-1 block w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium">Описание</label>
+        <textarea name="description" rows="3" required
+                  class="mt-1 block w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary">{{ event.description }}</textarea>
+      </div>
+      <div>
+        <label class="block text-sm font-medium">Дата и время</label>
+        <input type="datetime-local" name="event_date"
+               value="{{ event.event_date|fmt_dt('%Y-%m-%dT%H:%M') }}" required
+               class="mt-1 block w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary" />
+      </div>
+      <div class="flex justify-end space-x-3 pt-4">
+        <button type="button" data-modal-close class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg">Отмена</button>
+        <button type="submit" class="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg shadow transition">Сохранить</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
 
   <div id="add-employee" class="modal hidden fixed inset-0 bg-gray-900 bg-opacity-50 items-center justify-center z-50">
       <div class="modal-box bg-white p-8 rounded-xl shadow-2xl w-full max-w-md transform scale-95">
@@ -699,7 +884,7 @@
                 </div>
                 <div>
                   <label class="block text-sm font-medium">Дата рождения</label>
-                  <input type="date" name="birthday" value="{{ emp.birthday.strftime('%Y-%m-%d') if emp.birthday }}" class="mt-1 block w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary" />
+                  <input type="date" name="birthday" value="{{ emp.birthday|fmt_date('%Y-%m-%d') }}"  class="mt-1 block w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary" />
                 </div>
                 <div class="flex justify-end space-x-3 pt-4">
                   <button type="button" data-modal-close class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg">Отмена</button>
@@ -760,8 +945,103 @@
     </div>
   </div>
 
+  <div id="add-topic" class="modal hidden fixed inset-0 bg-gray-900 bg-opacity-50 items-center justify-center z-50">
+    <div class="modal-box bg-white p-8 rounded-xl shadow-2xl w-full max-w-lg transform scale-95">
+        <div class="flex justify-between items-center mb-6 border-b pb-4">
+          <h3 class="text-2xl font-semibold">Новая тема в Базе знаний</h3>
+          <button data-modal-close class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+        </div>
+        <form action="{{ url_for('add_topic') }}" method="POST" enctype="multipart/form-data" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium">Заголовок</label>
+            <input type="text" name="title" required class="mt-1 block w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Содержание</label>
+            <textarea name="content" rows="5" required class="mt-1 block w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary"></textarea>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Изображение (необязательно)</label>
+            <input type="file" name="image" class="mt-1 block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-primary hover:file:bg-indigo-100" accept="image/*" />
+          </div>
+          <div class="flex justify-end space-x-3 pt-4">
+              <button type="button" data-modal-close class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg">Отмена</button>
+              <button type="submit" class="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg shadow transition">Создать тему</button>
+          </div>
+        </form>
+    </div>
+  </div>
+
+  {% for topic in topics %}
+<div id="edit-topic-{{ topic.id }}" class="modal hidden fixed inset-0 bg-gray-900 bg-opacity-50 items-center justify-center z-50">
+  <div class="modal-box bg-white p-8 rounded-xl shadow-2xl w-full max-w-lg transform scale-95">
+    <div class="flex justify-between items-center mb-6 border-b pb-4">
+      <h3 class="text-2xl font-semibold">Редактировать тему</h3>
+      <button data-modal-close class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+    </div>
+
+    <form action="{{ url_for('edit_topic', topic_id=topic.id) }}" method="POST" enctype="multipart/form-data" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium">Заголовок</label>
+        <input type="text" name="title"
+               value="{{ topic.title }}" required
+               class="mt-1 block w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary" />
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium">Содержание</label>
+        <textarea name="content" rows="5" required
+                  class="mt-1 block w-full rounded-md border-gray-300 p-2 focus:ring-primary focus:border-primary">{{ topic.content }}</textarea>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium">Заменить изображение (необязательно)</label>
+        <input type="file" name="image"
+               class="mt-1 block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-primary hover:file:bg-indigo-100"
+               accept="image/*" />
+        {% if topic.image_path %}
+          <small class="text-xs text-gray-500">Текущее: {{ topic.image_path }}</small>
+        {% endif %}
+      </div>
+
+      <div class="flex justify-end space-x-3 pt-4">
+        <button type="button" data-modal-close class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg">Отмена</button>
+        <button type="submit" class="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg shadow transition">Сохранить</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+
   <script>
   document.addEventListener('DOMContentLoaded', function() {
+    // ======================= ЛОГИКА МОБИЛЬНОЙ НАВИГАЦИИ (САЙДБАР) =======================
+    const sidebar = document.getElementById('sidebar');
+    const hamburgerBtn = document.getElementById('hamburger-btn');
+    const overlay = document.getElementById('sidebar-overlay');
+    const mobileHeaderTitle = document.getElementById('mobile-header-title');
+
+    function closeSidebar() {
+        sidebar.classList.add('-translate-x-full');
+        overlay.classList.add('hidden');
+    }
+
+    function openSidebar() {
+        sidebar.classList.remove('-translate-x-full');
+        overlay.classList.remove('hidden');
+    }
+
+    hamburgerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if(sidebar.classList.contains('-translate-x-full')) {
+            openSidebar();
+        } else {
+            closeSidebar();
+        }
+    });
+    overlay.addEventListener('click', closeSidebar);
+
+
     // ======================= ЛОГИКА НАВИГАЦИИ =======================
     const navLinks = document.querySelectorAll('.sidebar-link');
     const contentSections = document.querySelectorAll('.content-section');
@@ -774,9 +1054,16 @@
       const activeLink = document.querySelector(`.sidebar-link[data-target="${targetId}"]`);
 
       if (activeSection) activeSection.classList.add('active');
-      if (activeLink) activeLink.classList.add('active');
+      if (activeLink) {
+        activeLink.classList.add('active');
+        if (mobileHeaderTitle) mobileHeaderTitle.textContent = activeLink.querySelector('span').textContent;
+      }
 
       localStorage.setItem('activeTab', targetId);
+      // Close sidebar on mobile after navigation
+      if (window.innerWidth < 768) {
+        closeSidebar();
+      }
     }
 
     navLinks.forEach(link => {
@@ -845,20 +1132,29 @@
         });
     });
 
-    // ======================= ЛОГИКА АККОРДЕОНА =======================
-    document.querySelectorAll('.accordion-header').forEach(h=>{
-      h.addEventListener('click',()=>{
-        const c=h.nextElementSibling, i=h.querySelector('.accordion-icon');
-        const open = c.style.maxHeight && c.style.maxHeight !== '0px';
-        const parentAccordion = h.closest('.space-y-4');
-        parentAccordion.querySelectorAll('.accordion-content').forEach(x => x.style.maxHeight = null);
-        parentAccordion.querySelectorAll('.accordion-icon').forEach(x => x.classList.remove('rotate-180'));
-        if(!open){
-            c.style.maxHeight=c.scrollHeight+'px';
-            i.classList.add('rotate-180');
+    // ======================= ЛОГИКА АККОРДЕОНА (РАСКРЫВАЕМЫЕ РОЛИ) =======================
+    document.querySelectorAll('.accordion-header').forEach(header => {
+      header.addEventListener('click', () => {
+        const accordionContent = header.nextElementSibling;
+        const accordionIcon = header.querySelector('.accordion-icon');
+        const isOpen = accordionContent.style.maxHeight && accordionContent.style.maxHeight !== '0px';
+
+        if (isOpen) {
+          // Close the accordion
+          accordionContent.style.maxHeight = null;
+          if (accordionIcon) {
+            accordionIcon.classList.remove('rotate-180');
+          }
+        } else {
+          // Open the accordion
+          accordionContent.style.maxHeight = accordionContent.scrollHeight + 'px';
+          if (accordionIcon) {
+            accordionIcon.classList.add('rotate-180');
+          }
         }
       });
     });
+
 
     // ======================= ЛОГИКА SORTABLE.JS =======================
     document.querySelectorAll('.quiz-list').forEach(list=>{
@@ -866,14 +1162,16 @@
     });
 
     // ======================= ЛОГИКА ПОИСКА =======================
-    const searches=[
-      ['searchEmployees','employeesTable'],
-      ['searchArchivedEmployees','archivedEmployeesTable'],
-      ['searchEvents','eventsTable'],
-      ['searchIdeas','ideasList'],
-      ['searchKnowledge','knowledgeTable'],
-      ['searchRoles','rolesList']
-    ];
+    // ======================= ЛОГИКА ПОИСКА =======================
+const searches=[
+  ['searchEmployees','employeesTable'],
+  ['searchArchivedEmployees','archivedEmployeesTable'],
+  ['searchAttendance','attendanceTable'], // <-- 👇 ДОБАВЛЕНО
+  ['searchEvents','eventsTable'],
+  ['searchIdeas','ideasList'],
+  ['searchKnowledge','knowledgeTable'],
+  ['searchRoles','rolesList']
+];
     searches.forEach(([inpId,contId])=>{
       const inp=document.getElementById(inpId), cont=document.getElementById(contId);
       if(inp&&cont){
@@ -930,64 +1228,92 @@
         });
     });
 
-    // ======================= ЛОГИКА ДИНАМИЧЕСКИХ ФОРМ (Квизы) =======================
-    document.querySelectorAll('.add-quiz-form').forEach(form=>{
-      const qtype=form.querySelector('.quiz-type'), textDiv=form.querySelector('.text-answer'), choiceDiv=form.querySelector('.choice-section');
-      if (!qtype || !textDiv || !choiceDiv) return;
+   document.querySelectorAll('.add-quiz-form').forEach(form => {
+  const qtype     = form.querySelector('.quiz-type');
+  const textBlock = form.querySelector('.text-answer');
+  const textInput = form.querySelector('.text-answer input[name="text_answer"]');
+  const choiceSec = form.querySelector('.choice-section');
+  const optsCont  = form.querySelector('.options-container');
+  const addBtn    = form.querySelector('.add-option');
+  const hidOpts   = form.querySelector('.hidden-options'); // name="options"
+  const hidAns    = form.querySelector('.hidden-answer');  // name="answer"
 
-      const optsCont=form.querySelector('.options-container'), addBtn=form.querySelector('.add-option'), hidOpts=form.querySelector('.hidden-options'), hidAns=form.querySelector('.hidden-answer');
-      let count=0;
-
-      function toggleSections(){
-          if (qtype.value === 'choice') {
-            choiceDiv.classList.remove('hidden'); textDiv.classList.add('hidden');
-          } else {
-            choiceDiv.classList.add('hidden'); textDiv.classList.remove('hidden');
-          }
-          const accordionContent = form.closest('.accordion-content');
-          if (accordionContent && accordionContent.style.maxHeight) {
-            accordionContent.style.maxHeight = accordionContent.scrollHeight + 'px';
-          }
-      }
-      qtype.addEventListener('change', toggleSections);
-      toggleSections();
-
-      function renumber(){
-        count=0;
-        Array.from(optsCont.children).forEach((div,i)=>{
-          div.querySelector('input[type=text]').name=`opt_${i}`;
-          div.querySelector('input[type=radio]').value=i;
-          count++;
-        });
-        Array.from(optsCont.children).forEach(div=>{
-          const removeBtn = div.querySelector('button.remove-opt');
-          if(removeBtn) removeBtn.disabled=(count<=2);
-        });
-      }
-
-      function addOption(value=''){
-        const idx=count++, wrapper=document.createElement('div');
-        wrapper.className='flex items-center space-x-2';
-        wrapper.innerHTML = `<input type="radio" name="correct_radio" value="${idx}" class="text-primary focus:ring-primary"><input type="text" name="opt_${idx}" required placeholder="Вариант ${idx+1}" value="${value}" class="flex-1 rounded border-gray-300 px-2 py-1 focus:ring-primary focus:border-primary"><button type="button" class="remove-opt text-red-600 p-1">×</button>`;
-        wrapper.querySelector('.remove-opt').addEventListener('click',()=>{ optsCont.removeChild(wrapper); renumber(); });
-        optsCont.append(wrapper);
-        renumber();
-      }
-
-      if (optsCont.children.length === 0) { addOption(); addOption(); }
-      addBtn.addEventListener('click',()=>addOption());
-      form.addEventListener('submit',e=>{
-        if(qtype.value==='choice'){
-          const texts=[], radios=form.querySelectorAll('input[name=correct_radio]');
-          let chosen=null;
-          form.querySelectorAll('.options-container > div').forEach(div=>texts.push(div.querySelector('input[type=text]').value.trim()));
-          radios.forEach(r=>{ if(r.checked) chosen=Number(r.value); });
-          if(chosen===null){ alert('Выберите правильный вариант ответа'); e.preventDefault(); return; }
-          hidOpts.value=texts.join(';');
-          hidAns.value=texts[chosen];
-        }
-      });
+  // утилиты
+  const setVisible = (el, on) => el.classList.toggle('hidden', !on);
+  const setDisabledAll = (container, disabled) => {
+    container.querySelectorAll('input, select, textarea, button').forEach(i => {
+      // не отключаем саму кнопку "Добавить вариант"
+      if (i === addBtn) return;
+      i.disabled = disabled;
+      if (disabled) i.removeAttribute('required');
     });
+  };
+
+  function toggleSections() {
+    const isChoice = qtype.value === 'choice';
+
+    setVisible(choiceSec, isChoice);
+    setVisible(textBlock, !isChoice);
+
+    // включаем актуальные поля, отключаем скрытые
+    if (isChoice) {
+      setDisabledAll(choiceSec, false);
+      setDisabledAll(textBlock, true);
+      textInput.removeAttribute('required');
+    } else {
+      setDisabledAll(choiceSec, true);
+      setDisabledAll(textBlock, false);
+      textInput.setAttribute('required', 'required');
+    }
+
+    // фиксим высоту аккордеона
+    const acc = form.closest('.accordion-content');
+    if (acc && acc.style.maxHeight) acc.style.maxHeight = acc.scrollHeight + 'px';
+  }
+
+  qtype.addEventListener('change', toggleSections);
+
+  // генерация вариантов (БЕЗ required!)
+  function addOption(value='') {
+    const wrap = document.createElement('div');
+    wrap.className = 'flex items-center space-x-2';
+    wrap.innerHTML = `
+      <input type="radio" name="correct_radio" class="text-primary focus:ring-primary">
+      <input type="text" placeholder="Вариант" value="${value}"
+             class="flex-1 rounded border-gray-300 px-2 py-1 focus:ring-primary focus:border-primary">
+      <button type="button" class="remove-opt text-red-600 p-1">×</button>`;
+    wrap.querySelector('.remove-opt').addEventListener('click', () => wrap.remove());
+    optsCont.append(wrap);
+  }
+
+  if (optsCont && optsCont.children.length === 0) { addOption(); addOption(); }
+  addBtn?.addEventListener('click', () => addOption());
+
+  // первичная инициализация
+  toggleSections();
+
+  form.addEventListener('submit', e => {
+    const isChoice = qtype.value === 'choice';
+    if (isChoice) {
+      const texts  = Array.from(optsCont.querySelectorAll('input[type="text"]'))
+                     .map(i => i.value.trim()).filter(Boolean);
+      const radios = Array.from(form.querySelectorAll('input[name="correct_radio"]'));
+      const chosenIdx = radios.findIndex(r => r.checked);
+
+      if (texts.length < 2) { e.preventDefault(); alert('Добавьте минимум 2 варианта'); return; }
+      if (chosenIdx === -1) { e.preventDefault(); alert('Выберите правильный вариант'); return; }
+
+      hidOpts.value = texts.join(';');
+      hidAns.value  = texts[chosenIdx];
+    } else {
+      const val = (textInput?.value || '').trim();
+      if (!val) { e.preventDefault(); alert('Введите правильный ответ'); return; }
+      hidOpts.value = '';
+      hidAns.value  = val;
+    }
+  });
+});
+
 
   });
   </script>

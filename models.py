@@ -2,18 +2,25 @@ import os
 from datetime import datetime
 from sqlalchemy import (
     create_engine, Column, Integer, String, Date, Boolean,
-    ForeignKey, Time, Text, DateTime
+    ForeignKey, Time, Text, DateTime, BigInteger
 )
-from sqlalchemy.orm import sessionmaker, Session, declarative_base
+
+from sqlalchemy.orm import sessionmaker, Session, declarative_base, relationship # <-- ДОБАВИТЬ relationship
 from contextlib import contextmanager
 from dotenv import load_dotenv
 from aiogram.fsm.state import StatesGroup, State
+from sqlalchemy import UniqueConstraint
+from sqlalchemy import Date
 
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///bot.db")
 
 Base = declarative_base()
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+from sqlalchemy import create_engine
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,         # полезно для Render, чтобы отсекать «мертвые» коннекты
+)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 @contextmanager
@@ -33,8 +40,9 @@ class Role(Base):
 
 class Employee(Base):
     __tablename__ = "employees"
+    joined_main_chat = Column(Boolean, default=False)
     id = Column(Integer, primary_key=True)
-    telegram_id = Column(Integer, unique=True, index=True, nullable=True)
+    telegram_id = Column(BigInteger, unique=True, index=True, nullable=True)
     email = Column(String, unique=True, nullable=False)
     role = Column(String, nullable=False)
     name = Column(String, nullable=True)
@@ -42,6 +50,7 @@ class Employee(Base):
     registered = Column(Boolean, default=False)
     greeted = Column(Boolean, default=False)
     training_passed = Column(Boolean, default=False)
+    onboarding_completed = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     full_name = Column(String(256), nullable=True)
     position = Column(String(128), nullable=True)
@@ -61,13 +70,15 @@ class Attendance(Base):
     arrival_time = Column(Time, nullable=True)
     departure_time = Column(Time, nullable=True)
 
+    __table_args__ = (UniqueConstraint("employee_id", "date", name="uix_attendance_emp_date"),)
+
 class RegCode(Base):
     __tablename__ = "reg_codes"
     code = Column(String(8), primary_key=True)
     email = Column(String, ForeignKey("employees.email"), nullable=False)
     used = Column(Boolean, default=False)
 
-
+# --- МОДЕЛИ КОНТЕНТА ---
 # --- МОДЕЛИ КОНТЕНТА ---
 
 class Event(Base):
@@ -89,8 +100,17 @@ class Topic(Base):
     __tablename__ = "topics"
     id = Column(Integer, primary_key=True)
     title = Column(String, nullable=False)
-    content = Column(String, nullable=False)
+    content = Column(Text, nullable=False)   # ← было: text (NameError), нужно Text
     image_path = Column(String, nullable=True)
+
+class RoleGuide(Base):
+    __tablename__ = "role_guides"
+    id = Column(Integer, primary_key=True)
+    role = Column(String, index=True, nullable=False) # Для какой роли этот гайд
+    title = Column(String, nullable=False)            # Название (e.g., "Правила оформления отпуска")
+    content = Column(Text, nullable=True)             # Текстовое описание
+    file_path = Column(String, nullable=True)         # Путь к прикрепленному файлу (PDF, Docx)
+    order_index = Column(Integer, default=0)          # Для сортировки
 
 
 # --- МОДЕЛИ ОБУЧЕНИЯ И ОНБОРДИНГА ---
@@ -127,31 +147,23 @@ class TrainingMaterial(Base):
 class GroupChat(Base):
     __tablename__ = "group_chats"
     id = Column(Integer, primary_key=True)
-    name = Column(String, unique=True, nullable=False)
-    chat_id = Column(Integer, nullable=False)
+    name = Column(String, nullable=False)
+    chat_id = Column(BigInteger, nullable=False, unique=True)
 
 
 # --- АРХИВНЫЕ МОДЕЛИ ---
-
 class ArchivedEmployee(Base):
     __tablename__ = "archived_employees"
-
-    # ID теперь автоинкрементный и будет генерироваться сам
-    id = Column(Integer, primary_key=True, autoincrement=True)
-
-    # Новое поле для хранения ID из основной таблицы
-    original_employee_id = Column(Integer, nullable=False, index=True)
-
-    telegram_id = Column(Integer, unique=False, nullable=True)
-    email = Column(String, unique=False, nullable=False)
+    id = Column(Integer, primary_key=True, autoincrement=True)  # автоинкремент
+    original_employee_id = Column(Integer, nullable=False, index=True)  # ← добавлено
+    telegram_id = Column(Integer)
+    email = Column(String, nullable=False)
     role = Column(String, nullable=False)
-    name = Column(String, nullable=True)
-    birthday = Column(Date, nullable=True)
+    name = Column(String)
+    birthday = Column(Date)
     registered = Column(Boolean, default=False)
     training_passed = Column(Boolean, default=False)
     dismissal_date = Column(DateTime, default=datetime.utcnow)
-    # Примечание: я убрал поля, которых нет в вашей основной модели Employee,
-    # чтобы избежать ошибок при копировании. Можете добавить их обратно, если нужно.
 
 class ArchivedAttendance(Base):
     __tablename__ = "archived_attendance"
@@ -163,48 +175,46 @@ class ArchivedAttendance(Base):
     # НОВАЯ ТАБЛИЦА: Хранилище всех текстов бота
 
 class BotText(Base):
-        __tablename__ = "bot_texts"
-        id = Column(String(50), primary_key=True)  # Уникальный ключ (e.g., "welcome_greeting")
-        text = Column(Text, nullable=False, default="Текст не задан")
-        description = Column(String, nullable=True)  # Пояснение для админа
+    __tablename__ = "bot_texts"
+    id = Column(String(50), primary_key=True)
+    text = Column(Text, nullable=False, default="Текст не задан")
+    description = Column(String, nullable=True)
 
-    # НОВАЯ ТАБЛИЦА: Конструктор вопросов при онбординге
+# НОВАЯ ТАБЛИЦА: Конструктор вопросов при онбординге
 class OnboardingQuestion(Base):
-        __tablename__ = "onboarding_questions"
-        id = Column(Integer, primary_key=True)
-        role = Column(String, index=True, nullable=False)  # Для какой роли этот вопрос
-        order_index = Column(Integer, default=0)
-        question_text = Column(String, nullable=False)
-        data_key = Column(String(50), nullable=False)  # Ключ для сохранения ответа (e.g., "favorite_quote")
-        is_required = Column(Boolean, default=True)
+    __tablename__ = "onboarding_questions"
+    id = Column(Integer, primary_key=True)
+    role = Column(String, index=True, nullable=False)
+    order_index = Column(Integer, default=0)
+    question_text = Column(String, nullable=False)
+    data_key = Column(String(50), nullable=False)
+    is_required = Column(Boolean, default=True)
 
-    # НОВАЯ ТАБЛИЦА: Хранилище ответов на кастомные вопросы
+# НОВАЯ ТАБЛИЦА: Хранилище ответов на кастомные вопросы
 class EmployeeCustomData(Base):
-        __tablename__ = "employee_custom_data"
-        id = Column(Integer, primary_key=True)
-        employee_id = Column(Integer, ForeignKey("employees.id"), index=True)
-        data_key = Column(String(50), nullable=False)
-        data_value = Column(Text, nullable=False)
+    __tablename__ = "employee_custom_data"
+    id = Column(Integer, primary_key=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), index=True)
+    data_key = Column(String(50), nullable=False)
+    data_value = Column(Text, nullable=False)
 
-    # НОВАЯ ТАБЛИЦА: Шаги "Знакомства с компанией" после сбора данных
+# НОВАЯ ТАБЛИЦА: Шаги "Знакомства с компанией"
 class OnboardingStep(Base):
-        __tablename__ = "onboarding_steps"
-        id = Column(Integer, primary_key=True)
-        role = Column(String, index=True, nullable=False)
-        order_index = Column(Integer, default=0)
-        message_text = Column(Text, nullable=True)
-        file_path = Column(String, nullable=True)
-        file_type = Column(String(20), nullable=True)  # 'video_note', 'photo', 'document'
+    __tablename__ = "onboarding_steps"
+    id = Column(Integer, primary_key=True)
+    role = Column(String, index=True, nullable=False)
+    order_index = Column(Integer, default=0)
+    message_text = Column(Text, nullable=True)
+    file_path = Column(String, nullable=True)
+    file_type = Column(String(20), nullable=True)  # 'video_note', 'photo', 'document'
 
-    # FSM States
+# FSM States (тоже без внешней индентации)
 class Onboarding(StatesGroup):
-        awaiting_answer = State()  # Ожидание ответа на кастомный вопрос
-
+    awaiting_answer = State()
 
 class ArchivedIdea(Base):
     __tablename__ = "archived_ideas"
     id = Column(Integer, primary_key=True)
     employee_id = Column(Integer, nullable=False)
-    text = Column(Text, nullable=False)
+    idea_text = Column(Text, nullable=False)  # ← переименовано
     submission_date = Column(DateTime, default=datetime.utcnow)
-

@@ -5,6 +5,7 @@ import logging
 import html
 from datetime import datetime, date
 from math import radians, sin, cos, sqrt, atan2
+from sqlalchemy.exc import IntegrityError
 
 import aiohttp # <-- ДОБАВЛЕНО
 from aiogram import Bot, Dispatcher, F
@@ -22,15 +23,21 @@ from aiogram.types import (
 from aiogram.utils.chat_action import ChatActionSender
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
-from sqlalchemy import (
-    create_engine, Column, Integer, String, Date, Boolean,
-    ForeignKey, func, Time, Text, DateTime
-)
-from sqlalchemy.orm import sessionmaker, Session, declarative_base
-from contextlib import contextmanager
-import random
+from sqlalchemy import func  # остальное здесь не нужно
+
+from aiogram.enums import ChatType, ChatMemberStatus
+from aiogram.types import ChatMemberUpdated
 from aiogram.enums import ContentType
 from aiogram.types import ReplyKeyboardRemove
+
+
+# ИЗ models ИМПОРТИРУЕМ GroupChat (лучше не дублировать модель)
+from models import (
+    Employee, RoleGuide, BotText, OnboardingQuestion, EmployeeCustomData, OnboardingStep,
+    Attendance, RegCode, Event, Idea, QuizQuestion, Topic, RoleOnboarding,
+    ArchivedEmployee, ArchivedAttendance, ArchivedIdea,
+    GroupChat, get_session
+)
 
 
 # — Загрузка .env —
@@ -38,7 +45,11 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///bot.db")
 DATABASE_FILE = DATABASE_URL.replace("sqlite:///", "")
-COMMON_CHAT_ID = int(os.getenv("COMMON_CHAT_ID", "-1001234567890"))
+_common = os.getenv("COMMON_CHAT_ID")
+try:
+    COMMON_CHAT_ID = int(_common) if _common else None
+except ValueError:
+    COMMON_CHAT_ID = None
 OFFICE_LAT = float(os.getenv("OFFICE_LAT", "43.231518"))
 OFFICE_LON = float(os.getenv("OFFICE_LON", "76.882392"))
 OFFICE_RADIUS_METERS = int(os.getenv("OFFICE_RADIUS_METERS", "300"))
@@ -55,168 +66,40 @@ logger = logging.getLogger(__name__)
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
 
-# — SQLAlchemy setup —
-Base = declarative_base()
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 
-@contextmanager
-def get_session():
-    db: Session = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+def initialize_bot_texts():
+    """Проверяет и создает тексты для бота по умолчанию, если они отсутствуют."""
+    texts_to_ensure = {
+        "quiz_success_message": {
+            "text": "🎉 Поздравляем, {name}! Вы успешно прошли квиз ({correct}/{total})!",
+            "description": "Сообщение после успешного прохождения квиза. Доступные переменные: {name}, {correct}, {total}."
+        },
+        "group_join_success_message": {
+            "text": "Отлично, мы видим, что вы уже в нашем общем чате! Добро пожаловать в команду, теперь вам доступен весь функционал. 🎉",
+            "description": "Сообщение, если пользователь прошел квиз и уже состоит в общем чате."
+        },
+        "group_join_prompt_message": {
+            "text": "Остался последний шаг — вступите в наш основной рабочий чат, чтобы быть в курсе всех событий: {group_link}",
+            "description": "Сообщение, если пользователь прошел квиз, но еще не в общем чате. ВАЖНО: вручную замените {group_link} на реальную ссылку-приглашение в чат."
+        },
+        "welcome_to_common_chat": {
+            "text": "👋 Встречайте нового коллегу! {user_mention} ({user_name}) присоединился к нашему чату. Добро пожаловать в команду! 🎉",
+            "description": "Сообщение в общем чате при вступлении нового сотрудника. Доступные переменные: {user_mention}, {user_name}."
+        }
 
+    }
+    # ... (остальная логика)
+    with get_session() as db:
+        for key, data in texts_to_ensure.items():
+            existing = db.get(BotText, key)
+            if not existing:
+                db.add(BotText(id=key, text=data['text'], description=data['description']))
+        db.commit()
 
-# — Модели —
-class Employee(Base):
-    __tablename__ = "employees"
-    id = Column(Integer, primary_key=True)
-    telegram_id = Column(Integer, unique=True, index=True, nullable=True)
-    email = Column(String, unique=True, nullable=False)
-    role = Column(String, nullable=False)
-    name = Column(String, nullable=True)
-    birthday = Column(Date, nullable=True)
-    registered = Column(Boolean, default=False)
-    onboarding_completed = Column(Boolean, default=False)
-    training_passed = Column(Boolean, default=False)
-    is_active = Column(Boolean, default=True)
-    contact_info = Column(String(64), nullable=True)  # Добавлено для примера
-    photo_file_id = Column(String, nullable=True) # <-- НОВОЕ ПОЛЕ ДЛЯ АВАТАРА
-
-
-
-class BotText(Base):
-    __tablename__ = "bot_texts"
-    id = Column(String(50), primary_key=True)
-    text = Column(Text, nullable=False, default="Текст не задан")
-    description = Column(String, nullable=True)
-
-
-class OnboardingQuestion(Base):
-    __tablename__ = "onboarding_questions"
-    id = Column(Integer, primary_key=True)
-    role = Column(String, index=True, nullable=False)
-    order_index = Column(Integer, default=0)
-    question_text = Column(String, nullable=False)
-    data_key = Column(String(50), nullable=False)
-    is_required = Column(Boolean, default=True)
-
-
-class EmployeeCustomData(Base):
-    __tablename__ = "employee_custom_data"
-    id = Column(Integer, primary_key=True)
-    employee_id = Column(Integer, ForeignKey("employees.id"), index=True)
-    data_key = Column(String(50), nullable=False)
-    data_value = Column(Text, nullable=False)
-
-
-class OnboardingStep(Base):
-    __tablename__ = "onboarding_steps"
-    id = Column(Integer, primary_key=True)
-    role = Column(String, index=True, nullable=False)
-    order_index = Column(Integer, default=0)
-    message_text = Column(Text, nullable=True)
-    file_path = Column(String, nullable=True)
-    file_type = Column(String(20), nullable=True)
-
-
-class Attendance(Base):
-    __tablename__ = "attendance"
-    id = Column(Integer, primary_key=True)
-    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False, index=True)
-    date = Column(Date, nullable=False, index=True)
-    arrival_time = Column(Time, nullable=True)
-    departure_time = Column(Time, nullable=True)
-
-
-class RegCode(Base):
-    __tablename__ = "reg_codes"
-    code = Column(String(8), primary_key=True)
-    email = Column(String, ForeignKey("employees.email"), nullable=False)
-    used = Column(Boolean, default=False)
-
-
-class Event(Base):
-    __tablename__ = "events"
-    id = Column(Integer, primary_key=True)
-    title = Column(String(200), nullable=False)
-    description = Column(Text, nullable=False)
-    event_date = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-
-# bot.py - CORRECTED
-
-class Idea(Base):
-    __tablename__ = "ideas"
-    id = Column(Integer, primary_key=True)
-    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False)
-    text = Column(Text, nullable=False)               # ← здесь название "text"
-    submission_date = Column(DateTime, default=datetime.utcnow)
-
-class QuizQuestion(Base):
-    __tablename__ = "quiz_questions"
-    id = Column(Integer, primary_key=True)
-    role = Column(String, index=True, nullable=False)
-    question = Column(String, nullable=False)
-    answer = Column(String, nullable=False)
-    question_type = Column(String(20), nullable=False, default="text")
-    options = Column(String, nullable=True)
-    order_index = Column(Integer, nullable=False, default=0)
-
-
-class Topic(Base):
-    __tablename__ = "topics"
-    id = Column(Integer, primary_key=True)
-    title = Column(String, nullable=False)
-    content = Column(String, nullable=False)
-    image_path = Column(String, nullable=True)
-
-
-class RoleOnboarding(Base):
-    __tablename__ = "role_onboarding"
-    id = Column(Integer, primary_key=True)
-    role = Column(String, unique=True, nullable=False)
-    text = Column(String, nullable=False)
-    file_path = Column(String, nullable=True)
-    file_type = Column(String(20), nullable=True)
-
-
-class ArchivedEmployee(Base):
-    __tablename__ = "archived_employees"
-    id = Column(Integer, primary_key=True, autoincrement=False)
-    telegram_id = Column(Integer, unique=False, nullable=True)
-    email = Column(String, unique=False, nullable=False)
-    role = Column(String, nullable=False)
-    name = Column(String, nullable=True)
-    birthday = Column(Date, nullable=True)
-    registered = Column(Boolean, default=False)
-    training_passed = Column(Boolean, default=False)
-    dismissal_date = Column(DateTime, default=datetime.utcnow)
-
-
-class ArchivedAttendance(Base):
-    __tablename__ = "archived_attendance"
-    id = Column(Integer, primary_key=True)
-    employee_id = Column(Integer, nullable=False, index=True)
-    date = Column(Date, nullable=False, index=True)
-    arrival_time = Column(Time, nullable=True)
-    departure_time = Column(Time, nullable=True)
-
-
-class ArchivedIdea(Base):
-    __tablename__ = "archived_ideas"
-    id = Column(Integer, primary_key=True)
-    employee_id = Column(Integer, nullable=False)
-    idea_text = Column(Text, nullable=False)
-    submission_date = Column(DateTime, default=datetime.utcnow)
-
-
-Base.metadata.create_all(engine)
-
+# Вызываем функцию инициализации один раз при запуске приложения
+initialize_bot_texts()
+# --- КОНЕЦ НОВОГО БЛОКА ---
 
 # — FSM States —
 class Reg(StatesGroup):
@@ -380,6 +263,35 @@ def haversine(lat1, lon1, lat2, lon2):
 
 
 # --- Основная логика: Регистрация и Онбординг ---
+# --- НОВЫЙ ХЕНДЛЕР: бот стал админом/покинул чат и т.п. ---
+
+@dp.my_chat_member()
+async def on_bot_membership_change(event: ChatMemberUpdated):
+    # Интересуют только группы/супергруппы
+    if event.chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
+        return
+
+    chat_id = event.chat.id
+    chat_title = event.chat.title or str(chat_id)
+    new_status = event.new_chat_member.status
+
+    with get_session() as db:
+        # Если бот стал админом → запоминаем чат
+        if new_status == ChatMemberStatus.ADMINISTRATOR:
+            gc = db.query(GroupChat).filter_by(chat_id=chat_id).first()
+            if not gc:
+                db.add(GroupChat(name=chat_title, chat_id=chat_id))
+            else:
+                gc.name = chat_title  # на случай переименования
+            db.commit()
+
+        # Если бот больше не админ/вышел/его кикнули → удаляем из списка
+        if new_status in (ChatMemberStatus.LEFT, ChatMemberStatus.KICKED, ChatMemberStatus.MEMBER):
+            # MEMBER = просто участник, нам нужен именно админ
+            gc = db.query(GroupChat).filter_by(chat_id=chat_id).first()
+            if gc:
+                db.delete(gc)
+                db.commit()
 
 @dp.message(Command("start"))
 async def cmd_start(msg: Message, state: FSMContext):
@@ -443,29 +355,28 @@ async def process_code(msg: Message, state: FSMContext):
     )
     await state.set_state(Reg.waiting_for_status)
 
-    @dp.message(Reg.waiting_for_status, F.text.in_({"Я новенький", "Я действующий сотрудник"}))
-    async def process_employee_status(msg: Message, state: FSMContext):
-        if msg.text == "Я новенький":
-            await msg.answer(get_text("lets_get_acquainted", "Отлично, давайте познакомимся!"),
-                             reply_markup=ReplyKeyboardRemove())
-            await run_onboarding(msg.from_user.id, state)
+@dp.message(Reg.waiting_for_status, F.text.in_({"Я новенький", "Я действующий сотрудник"}))
+async def process_employee_status(msg: Message, state: FSMContext):
+    if msg.text == "Я новенький":
+        await msg.answer(get_text("lets_get_acquainted", "Отлично, давайте познакомимся!"),
+                         reply_markup=ReplyKeyboardRemove())
+        await run_onboarding(msg.from_user.id, state)
+        return
 
-        elif msg.text == "Я действующий сотрудник":
-            with get_session() as db:
-                emp = db.query(Employee).filter_by(telegram_id=msg.from_user.id).first()
-                # Пропускаем онбординг и тренинг
-                emp.onboarding_completed = True
-                emp.training_passed = True
-                db.commit()
+    # "Я действующий сотрудник"
+    with get_session() as db:
+        emp = db.query(Employee).filter_by(telegram_id=msg.from_user.id).first()
+        emp.onboarding_completed = True
+        emp.training_passed = True
+        db.commit()
 
-                # Определяем клавиатуру и приветствуем
-                kb = admin_kb if emp.role == "Admin" else employee_main_kb
-                await msg.answer(
-                    get_text("welcome_existing_employee",
-                             "С возвращением! Все функции бота теперь доступны для вас.").format(name=emp.name),
-                    reply_markup=kb
-                )
-            await state.clear()
+        kb = admin_kb if emp.role == "Admin" else employee_main_kb
+        await msg.answer(
+            get_text("welcome_existing_employee",
+                     "С возвращением! Все функции бота теперь доступны для вас.").format(name=emp.name),
+            reply_markup=kb
+        )
+    await state.clear()
 
 
 async def run_onboarding(user_id: int, state: FSMContext):
@@ -539,6 +450,9 @@ async def run_company_introduction(user_id: int, state: FSMContext):
                 if step.file_type == 'video_note':
                     async with ChatActionSender(bot=bot, chat_id=user_id, action=ChatAction.RECORD_VIDEO_NOTE):
                         await bot.send_video_note(user_id, file_to_send)
+                elif step.file_type == 'video':  # <-- ДОБАВЛЕН БЛОК ДЛЯ ОБЫЧНОГО ВИДЕО
+                    async with ChatActionSender(bot=bot, chat_id=user_id, action=ChatAction.UPLOAD_VIDEO):
+                        await bot.send_video(user_id, file_to_send)
                 elif step.file_type == 'photo':
                     async with ChatActionSender(bot=bot, chat_id=user_id, action=ChatAction.UPLOAD_PHOTO):
                         await bot.send_photo(user_id, file_to_send)
@@ -569,7 +483,7 @@ async def start_training(msg: Message, state: FSMContext):
         onboarding = db.query(RoleOnboarding).filter_by(role=emp.role).first()
 
     if onboarding and onboarding.text:
-        await msg.answer(onboarding.text, reply_markup=ReplyKeyboardMarkup(keyboard=[], remove_keyboard=True))
+        await msg.answer(onboarding.text, reply_markup=ReplyKeyboardRemove())
         if onboarding.file_path and os.path.exists(onboarding.file_path):
             try:
                 file_to_send = FSInputFile(onboarding.file_path)
@@ -611,13 +525,13 @@ async def on_quiz_start(cb: CallbackQuery, state: FSMContext):
         emp = db.query(Employee).filter_by(telegram_id=cb.from_user.id).first()
         qs = db.query(QuizQuestion).filter_by(role=emp.role).order_by(QuizQuestion.order_index).all()
 
-    if not qs:
-        emp.training_passed = True
-        db.commit()
-        kb = admin_kb if emp.role == "Admin" else employee_main_kb
-        await cb.message.answer("🎉 Для вашей роли квиза нет — тренинг пройден.", reply_markup=kb)
-        await cb.answer()
-        return
+        if not qs:
+            emp.training_passed = True
+            db.commit()
+            kb = admin_kb if emp.role == "Admin" else employee_main_kb
+            await cb.message.answer("🎉 Для вашей роли квиза нет — тренинг пройден.", reply_markup=kb)
+            await cb.answer()
+            return
 
     await cb.message.answer("📝 Начинаем квиз:")
     await send_quiz_question(cb.message, qs[0], 0)
@@ -627,30 +541,61 @@ async def on_quiz_start(cb: CallbackQuery, state: FSMContext):
 
 
 async def finish_quiz(user_id: int, chat_id: int, state: FSMContext, correct: int, total: int):
-    """Завершает квиз, обновляет статус сотрудника и отправляет результат."""
+    """Завершает квиз, проверяет членство в группе и отправляет результат."""
     with get_session() as db:
         emp = db.query(Employee).filter_by(telegram_id=user_id).first()
-
         if not emp:
-            logger.warning(f"User {user_id} finished a quiz but was not found in the database.")
-            await bot.send_message(chat_id,
-                                   "Произошла ошибка: ваш профиль не найден. Пожалуйста, свяжитесь с администратором.")
-            await state.clear()
+            # ... (обработка ошибки, если сотрудник не найден)
             return
 
         is_passed = correct >= total * 0.7
         emp.training_passed = is_passed
-        db.commit()
+        db.commit() # Сохраняем результат квиза
 
     kb = admin_kb if emp.role == "Admin" else employee_main_kb
-    if is_passed:
-        await bot.send_message(chat_id, f"🎉 Вы прошли квиз ({correct}/{total})! Теперь вам доступен весь функционал.",
-                               reply_markup=kb)
-    else:
+    if not is_passed:
         await bot.send_message(chat_id, f"😔 Вы не прошли квиз ({correct}/{total}). Попробуйте снова.",
                                reply_markup=training_kb)
-    await state.clear()
+        await state.clear()
+        return
 
+    # --- НОВЫЙ БЛОК ПРОВЕРКИ ЧЛЕНСТВА В ГРУППЕ ---
+    # Сначала отправляем сообщение об успешном квизе
+    quiz_success_text = get_text("quiz_success_message", "🎉 Поздравляем, {name}! Вы успешно прошли квиз ({correct}/{total})!").format(
+        name=emp.name, correct=correct, total=total
+    )
+    await bot.send_message(chat_id, quiz_success_text)
+
+    # Теперь проверяем группу
+    chat_id_to_check = COMMON_CHAT_ID
+    final_message = ""
+    send_main_keyboard = False
+
+    if not chat_id_to_check:
+        logger.warning("COMMON_CHAT_ID не установлен. Проверка членства в группе пропущена.")
+        final_message = get_text("group_join_success_message")
+        send_main_keyboard = True
+    else:
+        try:
+            member = await bot.get_chat_member(chat_id=chat_id_to_check, user_id=user_id)
+            if member.status not in {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED}:
+                # Пользователь в группе
+                with get_session() as db:
+                    emp = db.get(Employee, emp.id)
+                    emp.joined_main_chat = True
+                    db.commit()
+                final_message = get_text("group_join_success_message")
+                send_main_keyboard = True
+            else:
+                final_message = get_text("group_join_prompt_message")
+        except Exception as e:
+            logger.error(f"Не удалось проверить членство пользователя {user_id} в чате {chat_id_to_check}: {e}")
+            # Если произошла ошибка (напр., бот не в чате), отправляем просьбу вступить
+            final_message = get_text("group_join_prompt_message")
+
+    # Отправляем финальное сообщение (либо с просьбой, либо с поздравлением)
+    await bot.send_message(chat_id, final_message, reply_markup=kb if send_main_keyboard else None)
+    await state.clear()
 
 # --- БЛОК ПРОФИЛЯ ПОЛЬЗОВАТЕЛЯ ---
 
@@ -895,10 +840,9 @@ async def ask_departure(msg: Message, state: FSMContext, **kwargs):
 @access_check
 async def process_time_tracking(msg: Message, state: FSMContext, **kwargs):
     data = await state.get_data()
-    kind = data.get("tracking")  # либо "arrival", либо "departure"
+    kind = data.get("tracking")
     await state.clear()
 
-    # проверяем радиус
     distance = haversine(
         msg.location.latitude, msg.location.longitude,
         OFFICE_LAT, OFFICE_LON
@@ -910,17 +854,29 @@ async def process_time_tracking(msg: Message, state: FSMContext, **kwargs):
         emp = db.query(Employee).filter_by(telegram_id=msg.from_user.id).first()
         today = date.today()
         now = datetime.now().time()
+
+        # берём запись за сегодня или создаём
         rec = db.query(Attendance).filter_by(employee_id=emp.id, date=today).first()
+        if not rec:
+            rec = Attendance(employee_id=emp.id, date=today)
+
+            # на случай гонки: пытаемся вставить, если пара уже существует — перезагрузим
+            db.add(rec)
+            try:
+                db.flush()  # без коммита
+            except IntegrityError:
+                db.rollback()
+                rec = db.query(Attendance).filter_by(employee_id=emp.id, date=today).first()
 
         if kind == "arrival":
-            if rec:
+            if rec.arrival_time:
                 resp = "🤔 Уже отмечали приход сегодня."
             else:
-                db.add(Attendance(employee_id=emp.id, date=today, arrival_time=now))
+                rec.arrival_time = now
                 db.commit()
                 resp = f"✅ Приход зафиксирован в {now.strftime('%H:%M:%S')}."
-        else:  # departure
-            if not rec:
+        else:
+            if not rec.arrival_time:
                 resp = "🤔 Сначала отметьте приход."
             elif rec.departure_time:
                 resp = "🤔 Уже отмечали уход сегодня."
@@ -929,10 +885,8 @@ async def process_time_tracking(msg: Message, state: FSMContext, **kwargs):
                 db.commit()
                 resp = f"👋 Уход зафиксирован в {now.strftime('%H:%M:%S')}."
 
-    # возвращаем главное меню
-    kb = admin_kb if emp.role == "Admin" else employee_main_kb
-    await msg.answer(resp, reply_markup=kb)
-
+        kb = admin_kb if emp.role == "Admin" else employee_main_kb
+        await msg.answer(resp, reply_markup=kb)
 
 @dp.message(F.text == "🎉 Посмотреть ивенты")
 @access_check
@@ -984,35 +938,9 @@ async def process_idea(msg: Message, state: FSMContext, **kwargs):
     await msg.answer("Спасибо! Ваша идея принята.", reply_markup=kb)
     await state.clear()
 
-# --- Главный обработчик команды "Наши сотрудники" ---
-@dp.message(F.text == "👥 Наши сотрудники")
-@access_check
-async def show_employees_main_menu(msg: Message, state: FSMContext, **kwargs):
-    """Отправляет стартовое меню для раздела сотрудников."""
-    await state.clear()
-    await msg.answer(
-        "Как вы хотите найти сотрудника?",
-        reply_markup=get_employees_menu_kb()
-    )
+    # --- (отключено как дубль; используется новая версия ниже) ---
 
-async def send_roles_page(chat_id: int, message_id: int | None = None):
-    with get_session() as db:
-        roles = db.query(Employee.role).filter(Employee.is_active == True).distinct().all()
-    if not roles:
-        text = "В компании пока нет сотрудников."
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="🔙 В меню", callback_data="back_to_main")]])
-    else:
-        text = "Выберите отдел, чтобы посмотреть список сотрудников:"
-        buttons = [[InlineKeyboardButton(text=role[0], callback_data=f"role_select:{role[0]}:0")] for role in roles if
-                   role[0]]
-        buttons.append([InlineKeyboardButton(text="🔙 В меню", callback_data="back_to_main")])
-        kb = InlineKeyboardMarkup(inline_keyboard=buttons)
 
-    if message_id:
-        await bot.edit_message_text(text=text, chat_id=chat_id, message_id=message_id, reply_markup=kb)
-    else:
-        await bot.send_message(chat_id, text, reply_markup=kb)
 
 
 # --- Админские функции (не требуют декоратора, т.к. доступны только админам, которые уже прошли тренинг) ---
@@ -1034,7 +962,7 @@ async def view_ideas(msg: Message):
 
 scheduler = AsyncIOScheduler(timezone="Asia/Almaty")
 
-@scheduler.scheduled_job("cron", hour=18, minute=42)
+@scheduler.scheduled_job("cron", hour=7, minute=30)
 async def send_daily_weather():
     if not WEATHER_API_KEY:
         logger.warning("WEATHER_API_KEY не задан. Рассылка погоды пропущена.")
@@ -1044,7 +972,8 @@ async def send_daily_weather():
     weather_text = ""
 
     try:
-        async with aiohttp.ClientSession() as session:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url) as resp:
                 if resp.status == 200:
                     data = await resp.json()
@@ -1080,14 +1009,30 @@ async def send_daily_weather():
             logger.warning(f"Не удалось отправить погоду пользователю {user_id}: {e}")
         await asyncio.sleep(0.1)
 
-@scheduler.scheduled_job("cron", hour=9, minute=0)
+@scheduler.scheduled_job("cron", hour=9, minute=00)
 async def birthday_jobs():
-    today_date = datetime.now().date()
+    if COMMON_CHAT_ID is None:
+        logger.warning("COMMON_CHAT_ID не задан. Рассылка поздравлений пропущена.")
+        return
+
+    from sqlalchemy.engine.url import make_url
+    from sqlalchemy import text
+
+    today_md = datetime.now().strftime("%m-%d")
+    engine_url = make_url(os.getenv("DATABASE_URL", "sqlite:///bot.db"))
+
     with get_session() as db:
-        emps = db.query(Employee).filter(
-            func.strftime("%m-%d", Employee.birthday) == today_date.strftime("%m-%d"),
-            Employee.is_active == True
-        ).all()
+        if engine_url.get_backend_name().startswith("postgres"):
+            emps = db.query(Employee).filter(
+                text("to_char(birthday, 'MM-DD') = :md and is_active = true")
+            ).params(md=today_md).all()
+        else:
+            from sqlalchemy import func
+            emps = db.query(Employee).filter(
+                func.strftime("%m-%d", Employee.birthday) == today_md,
+                Employee.is_active == True
+            ).all()
+
 
     greeting_template = get_text("birthday_greeting", "🎂 Сегодня у {name} ({role}) день рождения! Поздравляем! 🎉")
     for emp in emps:
@@ -1214,6 +1159,16 @@ async def send_employee_buttons_by_role(chat_id: int, message_id: int, role: str
 
     await bot.edit_message_text(text=text, chat_id=chat_id, message_id=message_id, reply_markup=kb)
 
+@dp.callback_query(F.data == "back_to_kb_main_menu")
+async def back_to_kb_main_menu_handler(cb: CallbackQuery):
+    """
+    Возвращает пользователя в главное меню Базы Знаний (выбор между Статьями и Регламентами).
+    """
+    await cb.message.edit_text(
+        "Выберите раздел Базы Знаний:",
+        reply_markup=get_kb_menu_kb()
+    )
+    await cb.answer()
 
 # Обработчик нажатия на отдел (запускает показ сотрудников этого отдела)
 @dp.callback_query(F.data.startswith("role_select:"))
@@ -1353,6 +1308,8 @@ async def send_kb_page(chat_id: int, message_id: int | None = None, page: int = 
         if pagination_row:
             buttons.append(pagination_row)
 
+        buttons.append([InlineKeyboardButton(text="🔙 Назад к выбору раздела", callback_data="back_to_kb_main_menu")])
+
         kb = InlineKeyboardMarkup(inline_keyboard=buttons)
 
     # Редактируем сообщение, если оно уже есть, или отправляем новое
@@ -1362,15 +1319,67 @@ async def send_kb_page(chat_id: int, message_id: int | None = None, page: int = 
         await bot.send_message(chat_id, text, reply_markup=kb)
 
 
+def get_kb_menu_kb() -> InlineKeyboardMarkup:
+    """Возвращает клавиатуру с выбором разделов Базы Знаний."""
+    buttons = [
+        [InlineKeyboardButton(text="🧠 База знаний", callback_data="kb_show_topics")],
+        [InlineKeyboardButton(text="📚 Регламенты и гайды", callback_data="kb_show_guides")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 @dp.message(F.text == "🧠 База знаний")
 @access_check
-async def show_kb_topics(message: Message, state: FSMContext, **kwargs):
+async def show_kb_main_menu(message: Message, state: FSMContext, **kwargs):
     """
-    Основной обработчик для входа в Базу Знаний. Показывает первую страницу.
+    Отправляет главное меню Базы Знаний с выбором разделов.
     """
     await state.clear()
-    await send_kb_page(chat_id=message.chat.id)
+    await message.answer("Выберите раздел Базы Знаний:", reply_markup=get_kb_menu_kb())
 
+# Старый обработчик теперь будет на кнопке
+@dp.callback_query(F.data == "kb_show_topics")
+async def show_kb_topics_handler(cb: CallbackQuery):
+    await send_kb_page(chat_id=cb.message.chat.id, message_id=cb.message.message_id)
+    await cb.answer()
+
+
+# --- 👇 НОВЫЙ ОБРАБОТЧИК ДЛЯ РЕГЛАМЕНТОВ 👇 ---
+@dp.callback_query(F.data == "kb_show_guides")
+async def show_role_guides(cb: CallbackQuery):
+    await cb.answer()
+    with get_session() as db:
+        # Находим сотрудника и его роль
+        emp = db.query(Employee).filter_by(telegram_id=cb.from_user.id).first()
+        if not emp:
+            await cb.message.edit_text("Не удалось найти ваш профиль.")
+            return
+
+        # Находим все гайды для его роли
+        guides = db.query(RoleGuide).filter_by(role=emp.role).order_by(RoleGuide.order_index).all()
+
+    if not guides:
+        await cb.message.edit_text(f"Для вашей должности '{emp.role}' пока нет специальных регламентов.",
+                                   reply_markup=get_kb_menu_kb()) # Даем вернуться назад
+        return
+
+    await cb.message.edit_text(f"<b>Регламенты для должности «{emp.role}»:</b>")
+
+    # Отправляем каждый гайд отдельным сообщением
+    for guide in guides:
+        text = f"<b>{html.escape(guide.title)}</b>"
+        if guide.content:
+            text += f"\n\n{html.escape(guide.content)}"
+
+        await cb.message.answer(text)
+
+        if guide.file_path and os.path.exists(guide.file_path):
+            try:
+                file_to_send = FSInputFile(guide.file_path)
+                await cb.message.answer_document(file_to_send)
+            except Exception as e:
+                logger.error(f"Не удалось отправить файл регламента {guide.file_path}: {e}")
+
+        await asyncio.sleep(0.5) # Небольшая задержка для лучшего восприятия
 
 @dp.callback_query(F.data.startswith("kb_page:"))
 async def switch_kb_page(cb: CallbackQuery):
@@ -1433,6 +1442,106 @@ async def back_to_kb_list(cb: CallbackQuery):
     await send_kb_page(chat_id=cb.message.chat.id, page=page)
     await cb.answer()
 
+@dp.message(F.new_chat_members)
+async def on_user_join_via_message(msg: Message):
+    # работаем только в общем чате
+    if COMMON_CHAT_ID is None or msg.chat.id != COMMON_CHAT_ID:
+        return
+
+
+    for user in msg.new_chat_members:
+        # пропускаем ботов
+        if user.is_bot:
+            continue
+
+        user_id = user.id
+        user_name = user.full_name
+        user_mention = f"@{user.username}" if user.username else user_name
+
+        with get_session() as db:
+            emp = db.query(Employee).filter_by(telegram_id=user_id).first()
+            if not emp:
+                continue
+
+            # приветствуем только после тренинга и один раз
+            if not emp.training_passed or emp.joined_main_chat:
+                continue
+
+            emp.joined_main_chat = True
+            db.commit()
+
+        welcome_text = get_text(
+            "welcome_to_common_chat",
+            "👋 Встречайте нового коллегу! {user_mention} ({user_name}) присоединился к нашему чату. Добро пожаловать! 🎉"
+        ).format(user_mention=user_mention, user_name=html.escape(user_name))
+
+        try:
+            await bot.send_message(chat_id=COMMON_CHAT_ID, text=welcome_text)
+        except Exception as e:
+            logger.error(f"failed to send welcome: {e}")
+
+# ⬇️ убираем фильтр на декораторе, решаем логику внутри
+@dp.chat_member()
+async def on_user_join_common_chat(event: ChatMemberUpdated):
+    if COMMON_CHAT_ID is None or event.chat.id != COMMON_CHAT_ID:
+        return
+
+
+    # 2) лог — чтобы понять, что реально приходит
+    logging.info(
+        "chat_member update: chat=%s old=%s new=%s user=%s",
+        event.chat.id,
+        event.old_chat_member.status,
+        event.new_chat_member.status,
+        event.new_chat_member.user.id
+    )
+
+    # 3) интересует переход из «не в чате/ограничен» к «участник/админ/создатель»
+    from aiogram.enums import ChatMemberStatus
+    was = event.old_chat_member.status
+    now = event.new_chat_member.status
+    joined_from = {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED, ChatMemberStatus.RESTRICTED}
+    joined_to   = {ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR}
+
+    if was not in joined_from or now not in joined_to:
+        return
+
+    user = event.new_chat_member.user
+    user_id = user.id
+    user_name = user.full_name
+    user_mention = f"@{user.username}" if user.username else user_name  # красивое упоминание
+
+    with get_session() as db:
+        emp = db.query(Employee).filter_by(telegram_id=user_id).first()
+        if not emp:
+            logging.info("join ignored: employee not found for tg_id=%s", user_id)
+            return
+
+        # приветствуем только после тренинга и один раз
+        if not emp.training_passed:
+            logging.info("join ignored: training not passed for emp_id=%s", emp.id)
+            return
+        if emp.joined_main_chat:
+            logging.info("join ignored: already marked joined for emp_id=%s", emp.id)
+            return
+
+        emp.joined_main_chat = True
+        db.commit()
+
+    welcome_text = get_text(
+        "welcome_to_common_chat",
+        "👋 Встречайте нового коллегу! {user_mention} ({user_name}) присоединился к нашему чату. Добро пожаловать! 🎉"
+    ).format_map({
+        "user_mention": user_mention,
+        "user_name": html.escape(user_name),
+        "name": html.escape(user_name),  # алиас для {name}
+        "role": html.escape(emp.role or "—"),  # ← добавили подстановку {role}
+    })
+
+    try:
+        await bot.send_message(chat_id=COMMON_CHAT_ID, text=welcome_text)
+    except Exception as e:
+        logging.error("failed to send welcome: %s", e)
 
 # Обработчик для кнопки "Назад" из reply-меню (когда не активно никакое состояние)
 @dp.message(F.text == "🔙 Назад", StateFilter(None))

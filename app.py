@@ -1047,6 +1047,10 @@ def export_employees_xlsx():
         download_name=f"employees_{ts}.xlsx"
     )
 
+@app.route('/landing')
+def landing():
+    return render_template("landing.html")
+
 # --- ЗАПУСК ПРИЛОЖЕНИЯ ---
 if __name__ == '__main__':
     app.run(debug=True, port=5001)

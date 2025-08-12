@@ -8,11 +8,11 @@ def run_bot():
     subprocess.run(["python", "bot.py"])
 
 if __name__ == "__main__":
-        bot_thread = threading.Thread(target=run_bot)
     flask_thread = threading.Thread(target=run_flask)
-    bot_thread.start()
+    bot_thread = threading.Thread(target=run_bot)
 
     flask_thread.start()
-    bot_thread.join()
+    bot_thread.start()
 
     flask_thread.join()
+    bot_thread.join()

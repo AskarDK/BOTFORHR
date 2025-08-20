@@ -1078,6 +1078,17 @@ def get_employees_menu_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🔎 Поиск по имени", callback_data="search_by_name")],
     ])
 
+def _debug_validate_inline_kb(kb: InlineKeyboardMarkup):
+    dump = kb.model_dump(exclude_none=True)
+    for r, row in enumerate(dump.get("inline_keyboard", [])):
+        for c, btn in enumerate(row):
+            data = btn.get("callback_data")
+            if data is None:
+                continue
+            nbytes = len(data.encode("utf-8"))
+            if nbytes > 64 or nbytes < 1:
+                raise ValueError(f"button[{r},{c}] callback_data {nbytes} bytes: {data!r}")
+
 
 # --- Главный обработчик команды "Наши сотрудники" ---
 @dp.message(F.text == "👥 Наши сотрудники")
@@ -1166,10 +1177,11 @@ async def send_employee_buttons_by_role(chat_id: int, message_id: int, role: str
 
     # Кнопки пагинации
     pagination_row = []
+    tok = role_to_token(role)
     if page > 0:
-        pagination_row.append(InlineKeyboardButton(text="⬅️", callback_data=f"role_page:{role}:{page - 1}"))
+        pagination_row.append(InlineKeyboardButton(text="⬅️", callback_data=f"role_page:{tok}:{page - 1}"))
     if (page + 1) * PAGE_SIZE < total_employees:
-        pagination_row.append(InlineKeyboardButton(text="➡️", callback_data=f"role_page:{role}:{page + 1}"))
+        pagination_row.append(InlineKeyboardButton(text="➡️", callback_data=f"role_page:{tok}:{page + 1}"))
 
     if pagination_row:
         buttons.append(pagination_row)
@@ -1191,7 +1203,6 @@ async def back_to_kb_main_menu_handler(cb: CallbackQuery):
     )
     await cb.answer()
 
-# Обработчик нажатия на отдел (запускает показ сотрудников этого отдела)
 @dp.callback_query(F.data.startswith("role_select:"))
 async def handle_role_select(cb: CallbackQuery):
     _, tok, page_str = cb.data.split(":")
@@ -1201,7 +1212,6 @@ async def handle_role_select(cb: CallbackQuery):
         return
     await send_employee_buttons_by_role(cb.message.chat.id, cb.message.message_id, role, int(page_str))
     await cb.answer()
-
 
 @dp.callback_query(F.data.startswith("role_page:"))
 async def handle_employee_page_switch(cb: CallbackQuery):
@@ -1286,18 +1296,20 @@ async def handle_back_to_roles(cb: CallbackQuery):
     await cb.answer()
 
 
-# Эта функция остается из вашего кода, но теперь она часть нового флоу
-# Убедитесь, что она есть и выглядит так:
 async def send_roles_page(chat_id: int, message_id: int | None = None):
     with get_session() as db:
-        roles = db.query(Employee.role).filter(Employee.is_active == True).distinct().all()
+        roles = (
+            db.query(Employee.role)
+            .filter(Employee.is_active == True, Employee.role != None)
+            .distinct()
+            .all()
+        )
+
     text = "Выберите отдел для просмотра сотрудников:"
     buttons = []
-for (role,) in roles:
-    if not role:
-        continue
-    tok = role_to_token(role)
-    buttons.append([InlineKeyboardButton(text=role, callback_data=f"role_select:{tok}:0")])
+    for (role,) in roles:
+        tok = role_to_token(role)
+        buttons.append([InlineKeyboardButton(text=role, callback_data=f"role_select:{tok}:0")])
 
     buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_employees_menu")])
     kb = InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -1332,12 +1344,12 @@ async def send_kb_page(chat_id: int, message_id: int | None = None, page: int = 
         ]
 
         # Кнопки для пагинации
+        # Кнопки для пагинации
         pagination_row = []
-tok = role_to_token(role)
-if page > 0:
-    pagination_row.append(InlineKeyboardButton(text="⬅️", callback_data=f"role_page:{tok}:{page - 1}"))
-if (page + 1) * PAGE_SIZE < total_employees:
-    pagination_row.append(InlineKeyboardButton(text="➡️", callback_data=f"role_page:{tok}:{page + 1}"))
+        if page > 0:
+            pagination_row.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"kb_page:{page - 1}"))
+        if (page + 1) * PAGE_SIZE < total_topics:
+            pagination_row.append(InlineKeyboardButton(text="Вперед ➡️", callback_data=f"kb_page:{page + 1}"))
 
         if pagination_row:
             buttons.append(pagination_row)

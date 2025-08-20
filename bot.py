@@ -293,6 +293,27 @@ async def on_bot_membership_change(event: ChatMemberUpdated):
                 db.delete(gc)
                 db.commit()
 
+
+# +++ ДОБАВИТЬ:
+from hashlib import blake2s
+
+def role_to_token(role: str) -> str:
+    # 10 байт -> 20 hex-символов; стабильно <64 вместе с префиксом
+    return blake2s(role.encode("utf-8"), digest_size=5).hexdigest()
+
+def token_to_role(token: str) -> str | None:
+    # Без глобальных словарей: на лету ищем роль с таким токеном
+    with get_session() as db:
+        rows = db.query(Employee.role).filter(
+            Employee.is_active == True,
+            Employee.role != None
+        ).distinct().all()
+    for (role,) in rows:
+        if role and role_to_token(role) == token:
+            return role
+    return None
+
+
 @dp.message(Command("start"))
 async def cmd_start(msg: Message, state: FSMContext):
     await state.clear()
@@ -1173,15 +1194,22 @@ async def back_to_kb_main_menu_handler(cb: CallbackQuery):
 # Обработчик нажатия на отдел (запускает показ сотрудников этого отдела)
 @dp.callback_query(F.data.startswith("role_select:"))
 async def handle_role_select(cb: CallbackQuery):
-    _, role, page_str = cb.data.split(":")
+    _, tok, page_str = cb.data.split(":")
+    role = token_to_role(tok)
+    if not role:
+        await cb.answer("Раздел не найден.", show_alert=True)
+        return
     await send_employee_buttons_by_role(cb.message.chat.id, cb.message.message_id, role, int(page_str))
     await cb.answer()
 
 
-# Обработчик переключения страниц со списком сотрудников отдела
 @dp.callback_query(F.data.startswith("role_page:"))
 async def handle_employee_page_switch(cb: CallbackQuery):
-    _, role, page_str = cb.data.split(":")
+    _, tok, page_str = cb.data.split(":")
+    role = token_to_role(tok)
+    if not role:
+        await cb.answer("Страница не найдена.", show_alert=True)
+        return
     await send_employee_buttons_by_role(cb.message.chat.id, cb.message.message_id, role, int(page_str))
     await cb.answer()
 
@@ -1264,8 +1292,13 @@ async def send_roles_page(chat_id: int, message_id: int | None = None):
     with get_session() as db:
         roles = db.query(Employee.role).filter(Employee.is_active == True).distinct().all()
     text = "Выберите отдел для просмотра сотрудников:"
-    buttons = [[InlineKeyboardButton(text=role[0], callback_data=f"role_select:{role[0]}:0")] for role in roles if
-               role[0]]
+    buttons = []
+for (role,) in roles:
+    if not role:
+        continue
+    tok = role_to_token(role)
+    buttons.append([InlineKeyboardButton(text=role, callback_data=f"role_select:{tok}:0")])
+
     buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_employees_menu")])
     kb = InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -1300,10 +1333,11 @@ async def send_kb_page(chat_id: int, message_id: int | None = None, page: int = 
 
         # Кнопки для пагинации
         pagination_row = []
-        if page > 0:
-            pagination_row.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"kb_page:{page - 1}"))
-        if (page + 1) * PAGE_SIZE < total_topics:
-            pagination_row.append(InlineKeyboardButton(text="Вперед ➡️", callback_data=f"kb_page:{page + 1}"))
+tok = role_to_token(role)
+if page > 0:
+    pagination_row.append(InlineKeyboardButton(text="⬅️", callback_data=f"role_page:{tok}:{page - 1}"))
+if (page + 1) * PAGE_SIZE < total_employees:
+    pagination_row.append(InlineKeyboardButton(text="➡️", callback_data=f"role_page:{tok}:{page + 1}"))
 
         if pagination_row:
             buttons.append(pagination_row)

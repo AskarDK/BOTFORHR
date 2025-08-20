@@ -6,6 +6,7 @@ import html
 from datetime import datetime, date
 from math import radians, sin, cos, sqrt, atan2
 from sqlalchemy.exc import IntegrityError
+import re  # ← добавили
 
 import aiohttp # <-- ДОБАВЛЕНО
 from aiogram import Bot, Dispatcher, F
@@ -672,11 +673,11 @@ async def process_profile_back(cb: CallbackQuery, state: FSMContext):
     await cb.answer()
 
 
-# Клавиатура для выбора поля для редактирования
 def get_edit_profile_kb() -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(text="🖼️ Изменить аватар", callback_data="edit_field:photo")],
         [InlineKeyboardButton(text="👤 Изменить имя", callback_data="edit_field:name")],
+        [InlineKeyboardButton(text="✉️ Изменить почту", callback_data="edit_field:email")],  # ← добавили
         [InlineKeyboardButton(text="📞 Изменить контакты", callback_data="edit_field:contact_info")],
         [InlineKeyboardButton(text="❌ Отмена", callback_data="edit_cancel")]
     ]
@@ -716,6 +717,7 @@ async def choose_field_to_edit(cb: CallbackQuery, state: FSMContext):
     prompts = {
         "photo": "📸 Отправьте мне новое фото для аватара.",
         "name": "👤 Введите ваше новое имя.",
+        "email": "✉️ Введите новый email (пример: name@domain.com).",  # ← добавили
         "contact_info": "📞 Введите новую контактную информацию (например, номер телефона)."
     }
 
@@ -754,14 +756,43 @@ async def handle_new_text_value(msg: Message, state: FSMContext):
         await msg.answer("Неверное действие. Выберите поле для редактирования с помощью кнопок.")
         return
 
+    new_value = msg.text.strip()
+
+    # Специальная обработка email: валидация + уникальность
+    if field_to_edit == "email":
+        # Простая, но рабочая валидация формата email
+        if not re.fullmatch(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", new_value):
+            await msg.answer("❌ Неверный формат email. Пример: name@domain.com\nПопробуйте ещё раз или нажмите «❌ Отмена».")
+            return
+        new_value = new_value.lower()
+
+        with get_session() as db:
+            emp = db.query(Employee).filter_by(telegram_id=msg.from_user.id).first()
+            # Проверка уникальности email среди других активных сотрудников (если требуется — убери is_active)
+            conflict = db.query(Employee).filter(
+                Employee.email == new_value,
+                Employee.id != emp.id
+            ).first()
+            if conflict:
+                await msg.answer("❌ Такой email уже используется другим пользователем. Введите другой адрес.")
+                return
+
+            emp.email = new_value
+            db.commit()
+
+        await msg.answer("✅ Email успешно обновлён!")
+        await state.clear()
+        await show_profile(msg, state)
+        return
+
+    # Для остальных текстовых полей — как раньше
     with get_session() as db:
         emp = db.query(Employee).filter_by(telegram_id=msg.from_user.id).first()
-        setattr(emp, field_to_edit, msg.text)
+        setattr(emp, field_to_edit, new_value)
         db.commit()
 
     await msg.answer(f"✅ Поле '{field_to_edit}' успешно обновлено!")
     await state.clear()
-    # Показываем обновленный профиль
     await show_profile(msg, state)
 
 @dp.message(Quiz.waiting_answer)
